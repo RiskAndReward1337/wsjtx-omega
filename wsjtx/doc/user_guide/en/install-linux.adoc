@@ -1,0 +1,8 @@
+// Status=edited
+
+For *Linux*, .deb and .rpm packages are available, which are suitable for Debian, Ubuntu, Mint, and other Debian-based systems.
+Go to the WSJT-X Improved project page, navigate to the folder for the respective major version, and then to the “Linux” subfolder.
+
+The packages for *Raspberry Pi OS* are located in the “Raspberry Pi” subfolder. Both 32-bit packages (“...armhf.deb”) and 64-bit packages (“...arm64.deb”) are available.
+
+NOTE: If you encounter problems installing the packages provided, remove any existing _WSJT-X_ packages by running "sudo dpkg -P wsjtx". If exists, remove also the wsjtx-doc package by running "sudo dpkg -P wsjtx-doc". Then install one of the installation packages of _WSJT-X Improved_.

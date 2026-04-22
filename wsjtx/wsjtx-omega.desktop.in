@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Name=@WSJTX_PACKAGE_DISPLAY_NAME@
+Comment=Amateur Radio Weak Signal Operating
+Exec=@WSJTX_LAUNCHER_NAME@
+Icon=@WSJTX_ICON_BASE_NAME@
+Terminal=false
+X-MultipleArgs=false
+Type=Application
+Categories=AudioVideo;Audio;HamRadio;
+StartupNotify=true

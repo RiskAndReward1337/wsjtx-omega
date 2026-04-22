@@ -1,0 +1,37 @@
+WSJTX Omega Windows Build
+=========================
+
+This repository can build the Windows installer directly from the checked-in
+`wsjtx/` source tree by using the top-level superbuild.
+
+Prerequisites
+-------------
+1. Install MSYS2 from https://www.msys2.org/
+2. Open the "MSYS2 MinGW 64-bit" shell.
+3. Install the required packages:
+   pacman -S mingw-w64-x86_64-gcc \
+             mingw-w64-x86_64-gcc-fortran \
+             mingw-w64-x86_64-qt5-base \
+             mingw-w64-x86_64-qt5-multimedia \
+             mingw-w64-x86_64-qt5-serialport \
+             mingw-w64-x86_64-boost \
+             mingw-w64-x86_64-fftw \
+             mingw-w64-x86_64-portaudio \
+             mingw-w64-x86_64-libusb \
+             mingw-w64-x86_64-cmake \
+             mingw-w64-x86_64-nsis \
+             git make patch
+
+Suggested flow
+--------------
+1. Refresh the bundled source archive if desired:
+   bash scripts/refresh-source-bundle.sh
+2. Configure:
+   cmake -S . -B build-windows -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+3. Build the installer:
+   cmake --build build-windows --target package --parallel
+
+Result
+------
+The installer should appear in:
+  build-windows/wsjtx-prefix/src/wsjtx-build/

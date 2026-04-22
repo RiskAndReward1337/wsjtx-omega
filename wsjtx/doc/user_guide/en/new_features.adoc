@@ -1,0 +1,81 @@
+[[NEW_FEATURES]]
+//=== New in Version {VERSION_MAJOR}.{VERSION_MINOR}
+  
+=== New in Version 3.1
+
+A new 3.1 release of _WSJT-X Improved_ is currently under development. Some features may not yet be included in this User Guide. 
+
+TIP: We recommend that you always make backup copies of your *WSJT-X.ini* and *wsjtx_log.adi* files before installing program releases that involve major changes! 
+
+New features compared to WSJT-X Improved 3.0.0 251212:
+
+*1. Introduction of a new FT2 mode*
+
+ - FT2 is a super-fast 77-bit mode with TR periods of 3.75 seconds (= 1/2 of FT4).
+
+ - It goes back to experiments by Joe and Steve in 2019, which later became FT4. IU8LMC recently introduced "his" FT2 mode with slightly modified parameters, but refused to publish the source code. This contradicts ham spirit, and violates GPLv3 licence. I thought the best answer was to reverse engineer "his" FT2 mode and make it open source.
+
+ - Note that FT2 is still experimental. I haven't decided yet whether we'll keep it. Let's see if FT2 proves itself alongside FT4, or if it's just a short-lived hype. 
+
+
+*2. Support of QSOs between two stations with non-standard or compound callsigns for the
+   77-bit modes (FT8, FT4, FT2, MSK144, Q65, FST4)* 
+
+The following QSO types are now possible:
+
+ - two non-standard callsigns (e.g. DG123YCB with W250USA) 
+
+ - two compound callsigns (e.g. DG2YCB/QRP with W1XYZ/YOTA, or HB9/DG2YCB with KP5/W1XY)
+
+ - non-standard callsign and compound callsign (e.g. DG123YCB with W1XYZ/QRP)
+
+ - non-standard callsign and /P callsign (e.g. DG123YCB with W1XYZ/P)
+
+ - two standard callsigns with /P, /M, /R or whatever (e.g. DG2YCB/MM with W1XYZ/P)
+
+Important:
+
+   - Both stations must use WSJT-X Improved 3.1 (or compatible software) for such QSOs.
+     I noticed that some beta builds of JTDX and MSHV seem to be compatible with these
+     message formats, however, the standard WSJT-X would get stuck in an endless autoseq
+     loop.
+
+   - All previous message types are still fully supported, making WSJT-X Improved 3.1 
+     fully backward compatible.
+
+   - These new QSO types cannot be used in special operating activities (contest modes), as the available
+     77 bits are not sufficient for this purpose.
+
+
+*3. New technology for the MAP65 program* 
+
+ - The map65.exe file is now less than 1/4 the size it was before. 
+   This new technology will (hopefully) also bring stability improvements.
+
+
+*4. Various minor improvements and fixes*
+
+ - Added a new option to *skip a8 decodes* for the multithreaded FT8 decoder (MTD).
+
+ - The *band hopping interval* can now be switched between 1 minute and 2 minutes. See the new checkbox on the Settings | General tab.
+
+ - The "*Less button coloring*" option has been removed because it was rarely used.
+
+ - Fixed a flaw that caused *FT4 decodes* not to be displayed *when the program was started with CQonly enabled*.
+
+ - Bugfix: Country names are no longer accidentally displayed when in *FST4W mode*.
+
+ - Fixed an inconsistency regarding the *highlighting of prefixes*.
+
+ - Transmissions above 5362 kHz on 60m are allowed *for UK stations* again. Only Tx frequencies between 5358 and 5362 kHz are prevented now.
+
+ - Better visibility of the Settings | *Tx Macros* tab when *dark style* is enabled.
+
+ - Added an option to *log the dial frequency* instead of the actual Tx frequency.
+
+
+*5. Support of the new Hamlib 5 series*
+
+ - The Update Hamlib function now supports both Hamlib 4 and Hamlib 5. The required version of the libhamlib DLL file is detected automatically.
+
+NOTE: Always use the latest builds available before reporting any bugs!

@@ -1,0 +1,7 @@
+build*/
+dist/
+dist-test/
+tmp/
+source-tree/
+.DS_Store
+*.log

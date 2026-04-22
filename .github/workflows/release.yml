@@ -1,0 +1,158 @@
+name: Build And Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  source-bundle:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release source archive
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME:-${GITHUB_SHA::7}}"
+          mkdir -p dist/source
+          bash scripts/create-release-source-archive.sh "dist/source/wsjtx-omega-source-${version}.tar.gz"
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-bundle
+          path: dist/source/*
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            gfortran \
+            git \
+            patch \
+            pkg-config \
+            qtbase5-dev \
+            qtbase5-dev-tools \
+            qt5-qmake \
+            qttools5-dev-tools \
+            qtmultimedia5-dev \
+            libqt5serialport5-dev \
+            libqt5websockets5-dev \
+            libboost-all-dev \
+            libfftw3-dev \
+            portaudio19-dev \
+            libusb-1.0-0-dev
+
+      - name: Build Linux package
+        run: |
+          cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release -DWSJT_GENERATE_DOCS=OFF
+          cmake --build build-linux --target package --parallel 2
+
+      - name: Collect Linux artifacts
+        run: |
+          mkdir -p dist/linux
+          find build-linux/wsjtx-prefix/src/wsjtx-build -maxdepth 1 -type f \
+            \( -name '*.deb' -o -name '*.tar.gz' -o -name '*.rpm' \) \
+            -exec cp '{}' dist/linux/ ';'
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: dist/linux/*
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            make
+            patch
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-gcc-fortran
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-qt5-base
+            mingw-w64-x86_64-qt5-multimedia
+            mingw-w64-x86_64-qt5-serialport
+            mingw-w64-x86_64-boost
+            mingw-w64-x86_64-fftw
+            mingw-w64-x86_64-portaudio
+            mingw-w64-x86_64-libusb
+            mingw-w64-x86_64-nsis
+
+      - uses: actions/checkout@v4
+
+      - name: Build Windows installer
+        run: |
+          cmake -S . -B build-windows -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-windows --target package --parallel 2
+
+      - name: Collect Windows artifacts
+        run: |
+          mkdir -p dist/windows
+          find build-windows/wsjtx-prefix/src/wsjtx-build -maxdepth 1 -type f -name '*.exe' -exec cp '{}' dist/windows/ ';'
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-packages
+          path: dist/windows/*
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - source-bundle
+      - linux
+      - windows
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download all workflow artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: release-artifacts
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          mapfile -d '' assets < <(find release-artifacts -type f -print0)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets were produced." >&2
+            exit 1
+          fi
+
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" "${assets[@]}" --clobber
+          else
+            gh release create "${tag}" "${assets[@]}" \
+              --title "WSJTX Omega ${tag}" \
+              --generate-notes
+          fi

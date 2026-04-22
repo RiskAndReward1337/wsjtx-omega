@@ -1,0 +1,41 @@
+WSJTX Omega Linux Build
+=======================
+
+This bundle is meant to be copied to a Linux machine and built there.
+The checked-in Omega source tree is in `wsjtx/`.
+
+Suggested flow
+--------------
+1. Extract the transfer archive.
+2. Install the build dependencies your distro needs for:
+   - CMake
+   - C/C++ compiler toolchain
+   - gfortran
+   - Qt5 base, multimedia, and serialport development packages
+   - Boost development packages
+   - FFTW development packages
+   - PortAudio development packages
+   - libusb-1.0 development packages
+   - patch
+   - make or ninja
+3. Configure:
+   cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release -DWSJT_GENERATE_DOCS=OFF
+4. Build:
+   cmake --build build-linux --parallel
+5. Optional package target:
+   cmake --build build-linux --target package
+   This now produces a side-by-side-safe Omega package such as
+   wsjtx-omega_3.1.0_amd64.deb.
+   The package also installs the Omega-branded desktop icon as
+   wsjtx-omega for Linux application menus.
+
+Notes
+-----
+- The top-level superbuild now prefers the checked-in `wsjtx/` source tree
+  when it is present.
+- Run `bash scripts/refresh-source-bundle.sh` if you want to refresh
+  `src/wsjtx.tgz` from the checked-in source before distributing the bundle.
+- The WSJT-X source tarball in src/wsjtx.tgz was rebuilt from the edited
+  Omega source tree so the Linux build includes the current fixes.
+- The top-level CMake superbuild uses the tarballs in src/ and applies the
+  local patch files from this directory.
