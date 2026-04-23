@@ -47,6 +47,7 @@ jobs:
             patch \
             pkg-config \
             qtbase5-dev \
+            qttools5-dev \
             qtbase5-dev-tools \
             qt5-qmake \
             qttools5-dev-tools \
@@ -95,9 +96,12 @@ jobs:
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-gcc-fortran
             mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
             mingw-w64-x86_64-qt5-base
             mingw-w64-x86_64-qt5-multimedia
             mingw-w64-x86_64-qt5-serialport
+            mingw-w64-x86_64-qt5-tools
+            mingw-w64-x86_64-qt5-websockets
             mingw-w64-x86_64-boost
             mingw-w64-x86_64-fftw
             mingw-w64-x86_64-portaudio
@@ -108,7 +112,13 @@ jobs:
 
       - name: Build Windows installer
         run: |
-          cmake -S . -B build-windows -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build-windows -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/mingw64 \
+            -DCMAKE_C_COMPILER=/mingw64/bin/gcc.exe \
+            -DCMAKE_CXX_COMPILER=/mingw64/bin/g++.exe \
+            -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran.exe \
+            -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe
           cmake --build build-windows --target package --parallel 2
 
       - name: Collect Windows artifacts

@@ -14,11 +14,14 @@ Prerequisites
              mingw-w64-x86_64-qt5-base \
              mingw-w64-x86_64-qt5-multimedia \
              mingw-w64-x86_64-qt5-serialport \
+             mingw-w64-x86_64-qt5-tools \
+             mingw-w64-x86_64-qt5-websockets \
              mingw-w64-x86_64-boost \
              mingw-w64-x86_64-fftw \
              mingw-w64-x86_64-portaudio \
              mingw-w64-x86_64-libusb \
              mingw-w64-x86_64-cmake \
+             mingw-w64-x86_64-ninja \
              mingw-w64-x86_64-nsis \
              git make patch
 
@@ -27,7 +30,13 @@ Suggested flow
 1. Refresh the bundled source archive if desired:
    bash scripts/refresh-source-bundle.sh
 2. Configure:
-   cmake -S . -B build-windows -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+   cmake -S . -B build-windows -G Ninja \
+     -DCMAKE_BUILD_TYPE=Release \
+     -DCMAKE_PREFIX_PATH=/mingw64 \
+     -DCMAKE_C_COMPILER=/mingw64/bin/gcc.exe \
+     -DCMAKE_CXX_COMPILER=/mingw64/bin/g++.exe \
+     -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran.exe \
+     -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe
 3. Build the installer:
    cmake --build build-windows --target package --parallel
 

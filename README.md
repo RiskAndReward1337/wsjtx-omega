@@ -62,7 +62,13 @@ cmake --build build-linux --target package --parallel
 Windows from an MSYS2 MinGW64 shell:
 
 ```bash
-cmake -S . -B build-windows -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build-windows -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/mingw64 \
+  -DCMAKE_C_COMPILER=/mingw64/bin/gcc.exe \
+  -DCMAKE_CXX_COMPILER=/mingw64/bin/g++.exe \
+  -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran.exe \
+  -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe
 cmake --build build-windows --target package --parallel
 ```
 
