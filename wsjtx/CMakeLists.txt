@@ -198,6 +198,12 @@ set (WSJTX_ICON_BASE_NAME "wsjtx_icon")
 set (WSJTX_ICON_FILE_NAME "${WSJTX_ICON_BASE_NAME}.png")
 set (WSJTX_SCALABLE_ICON_SOURCE "")
 
+if (WIN32)
+  set (WSJTX_DEBIAN_SOURCE_NAME "wsjtx-omega")
+  set (WSJTX_PACKAGE_DISPLAY_NAME "WSJTX Omega")
+  set (WSJTX_PACKAGE_SUMMARY "WSJTX Omega: Digital Modes for Weak Signal Communications in Amateur Radio")
+endif ()
+
 if (UNIX AND NOT APPLE)
   set (WSJTX_DEBIAN_SOURCE_NAME "wsjtx-omega")
   set (WSJTX_PACKAGE_DISPLAY_NAME "WSJTX Omega")

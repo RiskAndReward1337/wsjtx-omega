@@ -133,7 +133,7 @@ jobs:
       - name: Collect Windows artifacts
         run: |
           mkdir -p dist/windows
-          find build-windows/wsjtx-prefix/src/wsjtx-build -maxdepth 1 -type f -name '*.exe' -exec cp '{}' dist/windows/ ';'
+          find build-windows/wsjtx-prefix/src/wsjtx-build -maxdepth 1 -type f -name 'wsjtx*-win*.exe' -exec cp '{}' dist/windows/ ';'
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -159,6 +159,7 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
