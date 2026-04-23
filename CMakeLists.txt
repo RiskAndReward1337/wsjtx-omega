@@ -146,7 +146,7 @@ ExternalProject_Add (hamlib
   #UPDATE_COMMAND ${CMAKE_COMMAND} -E env "[ -f ./bootstrap ] && ./bootstrap"
   PATCH_COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/prepare-external-source.sh ${CMAKE_CURRENT_SOURCE_DIR}/hamlib.patch <SOURCE_DIR> hamlib-autotools
   BUILD_IN_SOURCE 1
-  CONFIGURE_COMMAND bash ./configure --prefix=<INSTALL_DIR> ${HAMLIB_CONFIGURE_OPTIONS} ${EXTRA_FLAGS} # LIBUSB_LIBS=${USB_LIBRARY}
+  CONFIGURE_COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/scripts/configure-hamlib.sh <INSTALL_DIR> ${HAMLIB_CONFIGURE_OPTIONS} ${EXTRA_FLAGS} # LIBUSB_LIBS=${USB_LIBRARY}
   BUILD_COMMAND ${EXTERNAL_MAKE_COMMAND} all V=1
   INSTALL_COMMAND make install V=1 DESTDIR=""
   STEP_TARGETS update install
