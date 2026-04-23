@@ -60,6 +60,16 @@ endif (NOT APPLE)
 set (EXTERNAL_MAKE_JOBS 2 CACHE STRING "Parallel jobs used for external make-based dependency builds")
 set (EXTERNAL_MAKE_COMMAND make "-j${EXTERNAL_MAKE_JOBS}")
 
+set (HAMLIB_CONFIGURE_OPTIONS
+  --disable-shared
+  --enable-static
+  --without-cxx-binding)
+if (WIN32)
+  # MSYS2 can report a usable readline library without the matching
+  # MinGW headers, which breaks the Hamlib test utilities build.
+  list (APPEND HAMLIB_CONFIGURE_OPTIONS --without-readline)
+endif ()
+
 
 #
 # function to read and extract MD5 hashes from a file
@@ -136,7 +146,7 @@ ExternalProject_Add (hamlib
   #UPDATE_COMMAND ${CMAKE_COMMAND} -E env "[ -f ./bootstrap ] && ./bootstrap"
   PATCH_COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/prepare-external-source.sh ${CMAKE_CURRENT_SOURCE_DIR}/hamlib.patch <SOURCE_DIR> hamlib-autotools
   BUILD_IN_SOURCE 1
-  CONFIGURE_COMMAND bash ./configure --prefix=<INSTALL_DIR> --disable-shared --enable-static --without-cxx-binding ${EXTRA_FLAGS} # LIBUSB_LIBS=${USB_LIBRARY}
+  CONFIGURE_COMMAND bash ./configure --prefix=<INSTALL_DIR> ${HAMLIB_CONFIGURE_OPTIONS} ${EXTRA_FLAGS} # LIBUSB_LIBS=${USB_LIBRARY}
   BUILD_COMMAND ${EXTERNAL_MAKE_COMMAND} all V=1
   INSTALL_COMMAND make install V=1 DESTDIR=""
   STEP_TARGETS update install
