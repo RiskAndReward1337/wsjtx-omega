@@ -134,8 +134,8 @@ ExternalProject_Add (hamlib
   PATCH_COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/prepare-external-source.sh ${CMAKE_CURRENT_SOURCE_DIR}/hamlib.patch <SOURCE_DIR> hamlib-autotools
   BUILD_IN_SOURCE 1
   CONFIGURE_COMMAND bash ./configure --prefix=<INSTALL_DIR> --disable-shared --enable-static --without-cxx-binding ${EXTRA_FLAGS} # LIBUSB_LIBS=${USB_LIBRARY}
-  BUILD_COMMAND $(MAKE) all V=1 # $(MAKE) is ExternalProject_Add() magic to do recursive make
-  INSTALL_COMMAND $(MAKE) install V=1 DESTDIR=""
+  BUILD_COMMAND make all V=1
+  INSTALL_COMMAND make install V=1 DESTDIR=""
   STEP_TARGETS update install
   )
 
@@ -147,7 +147,7 @@ add_custom_target (hamlib_sources
   COMMAND ${GIT_EXECUTABLE} clone --branch=${hamlib_TAG} --single-branch ${hamlib_repo} ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream/src
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream/src ./bootstrap
   COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream/build ../src/configure
-  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream/build $(MAKE) dist
+  COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream/build make dist
   COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream/build/${__hamlib_upstream}*.tar.gz ${CMAKE_CURRENT_BINARY_DIR}/${__hamlib_upstream}.tar.gz
   # COMMAND ${GIT_EXECUTABLE} archive --format=tgz --prefix=hamlib/ --remote=${hamlib_repo} ${hamlib_TAG} -o ${CMAKE_CURRENT_BINARY_DIR}/hamlib.tgz
   COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_CURRENT_BINARY_DIR}/hamlib-upstream
