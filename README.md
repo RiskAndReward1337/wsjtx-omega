@@ -4,15 +4,25 @@ WSJTX Omega is a GPLv3 amateur radio application for weak-signal digital modes.
 It is a derivative work built from WSJT-X, WSJT-X Improved+, and WSJT-Z.
 # What's Different?
 Features:
+
 Auto CQ
+
 Auto Call
+
 Auto Hunt (POTA)
+
 Auto Pota (AUTO CQ POTA)
+
 Decoder is automatically configured to be the fastest/strongest
+
 Filtering/Ignore workflows inspired by those found in WSJTZ
+
 Expanded Filter functionality.
+
 Dark Mode is automatically enabled along with my personally preferred color scheme for highlights.
+
 Automation Debugging output
+
 All automation features have heavily modified behavior vs Stock WSJTZ, to improve and minimize QRM/Fast QSOs.
 
 
