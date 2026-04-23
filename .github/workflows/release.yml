@@ -57,6 +57,7 @@ jobs:
             libqt5websockets5-dev \
             libboost-all-dev \
             libfftw3-dev \
+            libudev-dev \
             portaudio19-dev \
             libusb-1.0-0-dev
 
