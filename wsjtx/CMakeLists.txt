@@ -156,6 +156,16 @@ option (WSJT_RIG_NONE_CAN_SPLIT "Allow split operation with \"None\" as rig.")
 option (WSJT_TRACE_UDP "Debugging option that turns on UDP message protocol diagnostics.")
 option (WSJT_BUILD_UTILS "Build simulators and code demonstrators." ON)
 option (WSJT_FOX_OTP "Enable Fox OTP Verification Messages." ON)
+if (WIN32)
+  set (WSJT_ENABLE_OMNIRIG_DEFAULT ON)
+else ()
+  set (WSJT_ENABLE_OMNIRIG_DEFAULT OFF)
+endif ()
+option (WSJT_ENABLE_OMNIRIG "Enable OmniRig CAT support through the Windows ActiveX/COM server." ${WSJT_ENABLE_OMNIRIG_DEFAULT})
+if (WSJT_ENABLE_OMNIRIG AND NOT WIN32)
+  message (STATUS "Disabling OmniRig support because it is only available on Windows.")
+  set (WSJT_ENABLE_OMNIRIG OFF)
+endif ()
 CMAKE_DEPENDENT_OPTION (WSJT_QDEBUG_IN_RELEASE "Leave Qt debugging statements in Release configuration." OFF
   "NOT is_debug_build" OFF)
 CMAKE_DEPENDENT_OPTION (WSJT_ENABLE_EXPERIMENTAL_FEATURES "Enable features not fully ready for public releases." ON
@@ -377,12 +387,14 @@ if (WIN32)
     ${wsjt_CXXSRCS}
     killbyname.cpp
     )
+endif (WIN32)
 
+if (WIN32 AND WSJT_ENABLE_OMNIRIG)
   set (wsjt_qt_CXXSRCS
     ${wsjt_qt_CXXSRCS}
     Transceiver/OmniRigTransceiver.cpp
     )
-endif (WIN32)
+endif ()
 
 set (wsjt_FSRCS
   # put module sources first in the hope that they get rebuilt before use
@@ -956,7 +968,7 @@ set_source_files_properties (lib/filbig.f90 PROPERTIES COMPILE_FLAGS "-Wno-alias
 set_property (SOURCE ${all_C_and_CXXSRCS} APPEND_STRING PROPERTY COMPILE_FLAGS " -include wsjtx_config.h")
 set_property (SOURCE ${all_C_and_CXXSRCS} APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/wsjtx_config.h)
 
-if (WIN32)
+if (WIN32 AND WSJT_ENABLE_OMNIRIG)
   # generate the OmniRig COM interface source
   find_program (DUMPCPP dumpcpp)
   if (DUMPCPP-NOTFOUND)
@@ -1079,8 +1091,11 @@ find_package (Qt5 COMPONENTS Widgets SerialPort Multimedia PrintSupport Sql Ling
 
 if (WIN32)
   add_definitions (-DQT_NEEDS_QTMAIN)
-  find_package (Qt5AxContainer REQUIRED)
 endif (WIN32)
+
+if (WIN32 AND WSJT_ENABLE_OMNIRIG)
+  find_package (Qt5AxContainer REQUIRED)
+endif ()
 
 #
 # Library building setup
@@ -1557,10 +1572,10 @@ qt5_add_resources (wsjtx_RESOURCES_RCC
   )
 
 # AX COM servers
-if (WIN32)
+if (WIN32 AND WSJT_ENABLE_OMNIRIG)
   include (QtAxMacros)
   wrap_ax_server (GENAXSRCS ${AXSERVERSRCS})
-endif (WIN32)
+endif ()
 
 #
 # targets dependent on Qt
@@ -1576,9 +1591,9 @@ add_library (wsjt_qt STATIC ${wsjt_qt_CXXSRCS} ${wsjt_qt_GENUISRCS} ${GENAXSRCS}
 # set wsjtx_udp exports to static variants
 target_compile_definitions (wsjt_qt PUBLIC UDP_STATIC_DEFINE)
 target_link_libraries (wsjt_qt Hamlib::Hamlib Boost::log qcp Qt5::Widgets Qt5::Network Qt5::Sql Qt5::WebSockets)
-if (WIN32)
+if (WIN32 AND WSJT_ENABLE_OMNIRIG)
   target_link_libraries (wsjt_qt Qt5::AxContainer Qt5::AxBase)
-endif (WIN32)
+endif ()
 
 # build a library of package Qt functionality used in Fortran utilities
 add_library (fort_qt STATIC ${fort_qt_CXXSRCS})
