@@ -63,8 +63,10 @@ jobs:
 
       - name: Build Linux package
         run: |
-          cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release -DWSJT_GENERATE_DOCS=OFF
-          cmake --build build-linux --target package --parallel 2
+          bash scripts/run-with-heartbeat.sh 60 \
+            cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release -DWSJT_GENERATE_DOCS=OFF
+          bash scripts/run-with-heartbeat.sh 60 \
+            cmake --build build-linux --target package --parallel 2
 
       - name: Collect Linux artifacts
         run: |
@@ -114,14 +116,16 @@ jobs:
 
       - name: Build Windows installer
         run: |
-          cmake -S . -B build-windows -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH=/mingw64 \
-            -DCMAKE_C_COMPILER=/mingw64/bin/gcc.exe \
-            -DCMAKE_CXX_COMPILER=/mingw64/bin/g++.exe \
-            -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran.exe \
-            -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe
-          cmake --build build-windows --target package --parallel 2
+          bash scripts/run-with-heartbeat.sh 60 \
+            cmake -S . -B build-windows -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_PREFIX_PATH=/mingw64 \
+              -DCMAKE_C_COMPILER=/mingw64/bin/gcc.exe \
+              -DCMAKE_CXX_COMPILER=/mingw64/bin/g++.exe \
+              -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran.exe \
+              -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe
+          bash scripts/run-with-heartbeat.sh 60 \
+            cmake --build build-windows --target package --parallel 2
 
       - name: Collect Windows artifacts
         run: |

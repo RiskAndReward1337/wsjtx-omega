@@ -57,6 +57,9 @@ if (NOT APPLE)
   set (EXTRA_FLAGS "CFLAGS=-g -O2 -fPIC -fdata-sections -ffunction-sections" "LDFLAGS=-Wl,--gc-sections")
 endif (NOT APPLE)
 
+set (EXTERNAL_MAKE_JOBS 2 CACHE STRING "Parallel jobs used for external make-based dependency builds")
+set (EXTERNAL_MAKE_COMMAND make "-j${EXTERNAL_MAKE_JOBS}")
+
 
 #
 # function to read and extract MD5 hashes from a file
@@ -134,7 +137,7 @@ ExternalProject_Add (hamlib
   PATCH_COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/prepare-external-source.sh ${CMAKE_CURRENT_SOURCE_DIR}/hamlib.patch <SOURCE_DIR> hamlib-autotools
   BUILD_IN_SOURCE 1
   CONFIGURE_COMMAND bash ./configure --prefix=<INSTALL_DIR> --disable-shared --enable-static --without-cxx-binding ${EXTRA_FLAGS} # LIBUSB_LIBS=${USB_LIBRARY}
-  BUILD_COMMAND make all V=1
+  BUILD_COMMAND ${EXTERNAL_MAKE_COMMAND} all V=1
   INSTALL_COMMAND make install V=1 DESTDIR=""
   STEP_TARGETS update install
   )
