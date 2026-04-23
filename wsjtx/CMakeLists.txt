@@ -65,11 +65,15 @@ if(MINGW)
     message(FATAL_ERROR "windres not found; ensure MinGW bin dir is on PATH")
   endif()
 
-  # Use MinGW windres directly; feed it forward-slash paths; avoid bash and MSYS gcc
+  # Use MinGW windres directly. The stock Ninja RC rule is safer here; the
+  # custom override is kept for non-Ninja generators where MSYS path mangling
+  # has been more problematic.
   set(CMAKE_RC_COMPILER "${WINDRES_EXECUTABLE}")
-  set(CMAKE_RC_COMPILE_OBJECT
-    "<CMAKE_COMMAND> -E env MSYS2_ARG_CONV_EXCL='*' \"<CMAKE_RC_COMPILER>\" -O coff <DEFINES> <INCLUDES> <FLAGS> \"<SOURCE>\" \"<OBJECT>\""
-  )
+  if (NOT CMAKE_GENERATOR MATCHES "Ninja")
+    set(CMAKE_RC_COMPILE_OBJECT
+      "<CMAKE_COMMAND> -E env MSYS2_ARG_CONV_EXCL='*' \"<CMAKE_RC_COMPILER>\" -O coff <DEFINES> <INCLUDES> <FLAGS> \"<SOURCE>\" \"<OBJECT>\""
+    )
+  endif ()
 endif()
 
 #
