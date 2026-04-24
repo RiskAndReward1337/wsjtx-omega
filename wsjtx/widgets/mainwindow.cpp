@@ -7974,21 +7974,22 @@ void MainWindow::guiUpdate()
       tx_watchdog (true);       // disable transmit
     }
 
-    // Auto Call / Auto Hunt: never send CQ while waiting for next station to appear.
-    // clearDX() leaves m_ntx=6 after each QSO/timeout, but in these modes we only
-    // transmit when we have an explicit target (dxCallEntry non-empty).
-    // Guard: only suppress when not actively transmitting (g_iptt==0).  After a QSO
-    // completes, acceptQSO() calls clearDX() which sets m_ntx=6 and clears dxCallEntry
-    // while the 73 is still being sent (g_iptt==1).  Without the g_iptt guard this
+    // Auto Call / Auto Hunt: never send Tx6/CQ while waiting for next station to appear.
+    // Some QSO-complete paths select Tx6 before the delayed cleanup clears the
+    // completed target, so suppress Tx6 even if dxCallEntry is still populated.
+    // Guard: only suppress when not actively transmitting (g_iptt==0).  Some cleanup
+    // paths can change the selected Tx message while the 73 is still being sent
+    // (g_iptt==1).  Without the g_iptt guard this
     // sets m_bTxTime=false → m_btxok=false → stopTx(), killing the 73 mid-transmission.
     if (m_bTxTime && m_ntx == 6
-        && (ui->cbAutoCall->isChecked () || ui->cbAutoHunt->isChecked ())
-        && ui->dxCallEntry->text ().isEmpty ()) {
+        && (ui->cbAutoCall->isChecked () || ui->cbAutoHunt->isChecked ())) {
       if (g_iptt == 0) {
-        autoLog("TX_GUARD: suppressing idle CQ TX (ntx=6, no target, not transmitting)");
+        autoLog(QString("TX_GUARD: suppressing AutoCall/Hunt Tx6  target='%1'  tx6='%2'")
+                .arg(ui->dxCallEntry->text().trimmed())
+                .arg(ui->tx6->text().trimmed()));
         m_bTxTime = false;
       } else {
-        autoLog("TX_GUARD: allowing 73 to finish (g_iptt=1, ntx=6, dxCall empty)");
+        autoLog("TX_GUARD: allowing in-progress signoff to finish (g_iptt=1, ntx=6)");
       }
     }
 
@@ -11197,31 +11198,40 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
   } else if (ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked()) {
     // acceptQSO fires at the START of the 73 TX period (logQSOTimer fires immediately
     // when 73 is detected being sent).  We must NOT kill TX here or the 73 gets cut off.
-    // Also do not clearDX() yet: switching to Tx6 mid-signoff can leave the app stuck
-    // in the idle-TX guard until the next cycle, which looks like the waterfall stopped.
-    // After 1.2 TR periods (enough for the 73 to finish), clear the completed QSO and
-    // turn TX off so ZProcess sees !autoButton->isChecked() and is free to pick the next
-    // station. Guard: skip if the operator or automation already moved on.
-    autoLog(QString("acceptQSO: QSO complete (AutoCall/Hunt), letting 73 finish  call=%1  TRperiod=%2  g_iptt=%3")
-            .arg(call).arg(m_TRperiod).arg(g_iptt));
-    QTimer::singleShot(int(m_TRperiod * 1200), [=] {
+    // If the QSO completed from a received RR73 (including Fox-style RR73; ...),
+    // we are already off-air and can clean up immediately.  Otherwise wait long
+    // enough for our own final 73 to finish.
+    bool qsoCompleteOffAir = (g_iptt == 0 && !m_transmitting);
+    auto finishAutoCallHuntQSO = [=] {
         if (ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked()) {
-            if (ui->dxCallEntry->text() == call || m_hisCall == call) {
-                autoLog(QString("acceptQSO: 73 timer expired, clearing completed call '%1'").arg(call));
+            QString currentDx = ui->dxCallEntry->text().trimmed();
+            QString completedBase = Radio::base_callsign(call);
+            QString currentBase = Radio::base_callsign(currentDx);
+            bool currentIsCompletedCall = !call.isEmpty()
+                && (currentDx == call || (!completedBase.isEmpty() && currentBase == completedBase));
+            if (currentDx.isEmpty() || currentIsCompletedCall) {
+                autoLog(QString("acceptQSO: AutoCall/Hunt cleanup clearing completed call '%1'").arg(call));
                 m_QSOProgress = CALLING;
                 clearDX();
             }
             if (ui->dxCallEntry->text().isEmpty()) {
-                autoLog("acceptQSO: 73 timer expired, disabling TX (no new target)");
+                autoLog("acceptQSO: AutoCall/Hunt cleanup disabling TX (no new target)");
                 auto_tx_mode(false);
             } else {
-                autoLog(QString("acceptQSO: 73 timer expired, preserving target='%1'")
+                autoLog(QString("acceptQSO: AutoCall/Hunt cleanup preserving target='%1'")
                         .arg(ui->dxCallEntry->text()));
             }
         } else {
-            autoLog("acceptQSO: 73 timer expired after AutoCall/Hunt was turned off");
+            autoLog("acceptQSO: AutoCall/Hunt cleanup skipped after auto mode was turned off");
         }
-    });
+    };
+    autoLog(QString("acceptQSO: QSO complete (AutoCall/Hunt), cleanup pending  call=%1  TRperiod=%2  g_iptt=%3  offAir=%4")
+            .arg(call).arg(m_TRperiod).arg(g_iptt).arg(qsoCompleteOffAir));
+    if (qsoCompleteOffAir) {
+        finishAutoCallHuntQSO();
+    } else {
+        QTimer::singleShot(int(m_TRperiod * 1200), finishAutoCallHuntQSO);
+    }
   }
 }
 
