@@ -414,6 +414,8 @@ private slots:
   void on_cbTx6_toggled(bool b);
   void on_cbMenus_toggled(bool b);
   void on_cbCQonly_toggled(bool b);
+  void on_cbCQ73only_toggled(bool b);
+  void on_cbPotaOnly_toggled(bool b);
   void on_cbAutoSeq_toggled(bool b);
   // Auto CQ / Auto Call / Filtering slots (ported from WSJT-Z)
   void on_cbAutoCQ_toggled(bool b);

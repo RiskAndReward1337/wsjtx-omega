@@ -46,6 +46,7 @@
 #include <QAction>
 #include <QButtonGroup>
 #include <QActionGroup>
+#include <QSignalBlocker>
 #include <QSplashScreen>
 #include <QUdpSocket>
 #include <QAbstractItemView>
@@ -1548,6 +1549,8 @@ void MainWindow::writeSettings()
   m_settings->setValue("OutBufSize",outBufSize);
   m_settings->setValue ("HoldTxFreq", ui->cbHoldTxFreq->isChecked ());
   m_settings->setValue ("CQonly", ui->cbCQonly->isChecked ());
+  m_settings->setValue ("CQ73only", ui->cbCQ73only->isChecked ());
+  m_settings->setValue ("POTAonly", ui->cbPotaOnly->isChecked ());
   m_settings->setValue ("BypassFilters", ui->cbBypass->isChecked ());
   // Auto CQ / Auto Call / Filtering settings
   m_settings->setValue("AutoCallPriority",ui->cb_autoCallPriority->currentIndex());
@@ -2070,7 +2073,12 @@ void MainWindow::readSettings()
   outBufSize=m_settings->value("OutBufSize",4096).toInt();
   ui->cbHoldTxFreq->setChecked (m_settings->value ("HoldTxFreq", false).toBool ());
   HoldTxFreqStatus = m_settings->value ("HoldTxFreq", false).toBool ();
-  ui->cbCQonly->setChecked (m_settings->value ("CQonly", false).toBool ());
+  bool legacyCQonly = m_settings->value ("CQonly", false).toBool ();
+  bool hasCQ73onlySetting = m_settings->contains ("CQ73only");
+  ui->cbCQonly->setChecked (legacyCQonly && !(m_config.highlight_73 () && !hasCQ73onlySetting));
+  ui->cbCQ73only->setChecked (m_settings->value ("CQ73only",
+                                                  legacyCQonly && m_config.highlight_73 ()).toBool ());
+  ui->cbPotaOnly->setChecked (m_settings->value ("POTAonly", false).toBool ());
   ui->cbBypass->setChecked (m_settings->value ("BypassFilters", false).toBool ());
   m_pwrBandTxMemory=m_settings->value("pwrBandTxMemory").toHash();
   m_pwrBandTuneMemory=m_settings->value("pwrBandTuneMemory").toHash();
@@ -3321,7 +3329,9 @@ void MainWindow::fastSink(qint64 frames)
           ui->decodedTextBrowser->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
             m_logBook, m_currentBandPeriod, m_config.ppfx (),
             ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
-            haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted);
+            haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
+            ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
+            ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
           if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
         }
 
@@ -5796,7 +5806,10 @@ void::MainWindow::fast_decode_done()
     DecodedText decodedtext {message.replace (QChar::LineFeed, "")};
     if(!m_bFastDone && (!ui->cb_filtering->isChecked() || !callsignFiltered(decodedtext))) {
       ui->decodedTextBrowser->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
-         m_logBook, m_currentBandPeriod, m_config.ppfx (), false, false, 0.0, false, -99, "", m_muted);
+         m_logBook, m_currentBandPeriod, m_config.ppfx (),
+         ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(), false, 0.0, false, -99, "", m_muted,
+         ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
+         ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
       if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
     }
 
@@ -7069,7 +7082,9 @@ void MainWindow::readFromStdout()                             //readFromStdout
             ui->decodedTextBrowser->displayDecodedText (decodedtextJT, m_config.my_callsign (), m_mode, m_config.DXCC (),
                                                         m_logBook, m_currentBandPeriod, m_config.ppfx (),
                                                         ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
-                                                        haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted);
+                                                        haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
+                                                        ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
+                                                        ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
           } else {
             if (ui->actionHide_AP_info->isVisible() && ui->actionHide_AP_info->isChecked()) {
               // Hide FT8 AP information
@@ -7078,12 +7093,16 @@ void MainWindow::readFromStdout()                             //readFromStdout
               ui->decodedTextBrowser->displayDecodedText (decodedtext2, m_config.my_callsign (), m_mode, m_config.DXCC (),
                                                           m_logBook, m_currentBandPeriod, m_config.ppfx (),
                                                           ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
-                                                          haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted);
+                                                          haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
+                                                          ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
+                                                          ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
             } else {
               ui->decodedTextBrowser->displayDecodedText (decodedtext1, m_config.my_callsign (), m_mode, m_config.DXCC (),
                                                           m_logBook, m_currentBandPeriod, m_config.ppfx (),
                                                           ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
-                                                          haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted);
+                                                          haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
+                                                          ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
+                                                          ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
             }
           }
           if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
@@ -8670,8 +8689,12 @@ void MainWindow::guiUpdate()
         tx_status_label.setStyleSheet("QLabel{color: #000000; background-color: #00ff00}");
         auto t = tr ("Receiving");
         // switching tx_status_label text and color when filters are enabled
+        bool quickDecodeFilterActive = (ui->cbCQonly->isChecked()
+                                        || ui->cbCQ73only->isChecked()
+                                        || ui->cbPotaOnly->isChecked())
+                                       && ui->cbCQonly->isVisible();
         if (((SpecOp::NONE==m_specOp or SpecOp::HOUND==m_specOp) && !m_config.filters_for_Wait_and_Pounce_only() &&
-             (m_config.Blacklisted () or m_config.Whitelisted ())) or (ui->cbCQonly->isChecked() && ui->cbCQonly->isVisible())
+             (m_config.Blacklisted () or m_config.Whitelisted ())) or quickDecodeFilterActive
               or ui->actionHideToday->isChecked() or ui->actionHideIgnored->isChecked()
               or ui->actionHideTerritory1->isChecked() or ui->actionHideTerritory2->isChecked()
               or ui->actionHideTerritory3->isChecked() or ui->actionHideTerritory4->isChecked()
@@ -8680,7 +8703,7 @@ void MainWindow::guiUpdate()
               or ui->actionHideOC->isChecked() or ui->actionHideAN->isChecked()) {
           tx_status_label.setMinimumSize (QSize  {120, 18});
           if (ui->cbBypass->isChecked()) {
-            if (ui->cbCQonly->isChecked()) {
+            if (quickDecodeFilterActive) {
               tx_status_label.setStyleSheet ("QLabel{color: #000000; background-color: #00ffff}");
               t = " Receiving, Filters On ";
             } else {
@@ -8725,13 +8748,12 @@ void MainWindow::guiUpdate()
       Q_EMIT m_config.transceiver_volume(m_config.volume());
   }
 
-  if (m_config.highlight_73()) {
-      ui->cbCQonly->setText("CQ/73");
-      ui->cbCQonly->setToolTip("CQ or 73 messages only.");
-  } else {
-      ui->cbCQonly->setText("CQ only");
-      ui->cbCQonly->setToolTip("CQ messages only.");
-  }
+  ui->cbCQonly->setText("CQ only");
+  ui->cbCQonly->setToolTip("CQ messages only.");
+  ui->cbCQ73only->setText("CQ/73");
+  ui->cbCQ73only->setToolTip("CQ or 73/RR73 messages only.");
+  ui->cbPotaOnly->setText("POTA Only");
+  ui->cbPotaOnly->setToolTip("CQ POTA messages only.");
   check_button_color();
 
 }               //End of guiUpdate
@@ -11311,7 +11333,11 @@ void MainWindow::displayWidgets(qint64 n)
     if(i==29) ui->measure_check_box->setVisible(b);
     if(i==30) ui->labDXped->setVisible(b);
     if(i==31) ui->cbRxAll->setVisible(b);
-    if(i==32) ui->cbCQonly->setVisible(b);
+    if(i==32) {
+      ui->cbCQonly->setVisible(b);
+      ui->cbCQ73only->setVisible(b);
+      ui->cbPotaOnly->setVisible(b);
+    }
     if(i==33) ui->sbTR_FST4W->setVisible(b);
     if (34 == i)                // adjust the stacked widget
       {
@@ -14735,9 +14761,40 @@ void MainWindow::on_cbMenus_toggled(bool b)
   select_geometry (!b ? 2 : ui->actionSWL_Mode->isChecked () ? 1 : 0);
 }
 
-void MainWindow::on_cbCQonly_toggled(bool)
-{  //Fix this -- no decode here?
+void MainWindow::on_cbCQonly_toggled(bool b)
+{
+  if (b) {
+    QSignalBlocker blockCQ73 {ui->cbCQ73only};
+    QSignalBlocker blockPota {ui->cbPotaOnly};
+    ui->cbCQ73only->setChecked(false);
+    ui->cbPotaOnly->setChecked(false);
+  }
+  //Fix this -- no decode here?
   to_jt9(m_ihsym,1,-1);                //Send m_ihsym to jt9[.exe] and start decoding
+  decodeBusy(true);
+}
+
+void MainWindow::on_cbCQ73only_toggled(bool b)
+{
+  if (b) {
+    QSignalBlocker blockCQ {ui->cbCQonly};
+    QSignalBlocker blockPota {ui->cbPotaOnly};
+    ui->cbCQonly->setChecked(false);
+    ui->cbPotaOnly->setChecked(false);
+  }
+  to_jt9(m_ihsym,1,-1);
+  decodeBusy(true);
+}
+
+void MainWindow::on_cbPotaOnly_toggled(bool b)
+{
+  if (b) {
+    QSignalBlocker blockCQ {ui->cbCQonly};
+    QSignalBlocker blockCQ73 {ui->cbCQ73only};
+    ui->cbCQonly->setChecked(false);
+    ui->cbCQ73only->setChecked(false);
+  }
+  to_jt9(m_ihsym,1,-1);
   decodeBusy(true);
 }
 
@@ -18607,8 +18664,12 @@ bool MainWindow::callsignFiltered(DecodedText dt)
             m_potaWorkedToday.clear();
             m_potaLastDate = today;
         }
-        // tokens_re folds "CQ POTA" into a single word1 capture, so check for that directly
-        bool is_CQ_POTA = message_words.contains("CQ POTA");
+        // tokens_re folds "CQ POTA" into a single word1 capture; the regex
+        // fallback covers non-standard/free-text variants without widening the
+        // hunt filter to all POTA chatter.
+        bool is_CQ_POTA = message_words.contains("CQ POTA")
+            || dt.messageText().contains(QRegularExpression {R"(^CQ\s+POTA(?:\s|$))",
+                                            QRegularExpression::CaseInsensitiveOption});
         if (!is_CQ_POTA) {
             autoLog(QString("HUNT_FILTER: %1 SKIP (not CQ POTA)").arg(dxCall));
             return false;

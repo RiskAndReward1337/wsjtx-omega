@@ -19,6 +19,8 @@
 #include <QListIterator>
 #include <QRegularExpression>
 #include <QScrollBar>
+#include <QDesktopServices>
+#include <QUrl>
 
 #include "Configuration.hpp"
 #include "Decoder/decodedtext.h"
@@ -65,14 +67,19 @@ DisplayText::DisplayText(QWidget *parent)
   setContextMenuPolicy (Qt::CustomContextMenu);
   connect (this, &DisplayText::customContextMenuRequested, [this] (QPoint const& position) {
       auto * menu = createStandardContextMenu (position);
-      auto callsign = callsignAt(position);
+      auto callsign = callsignForLookup(position);
       QAction * ignore_action = nullptr;
+      QAction * qrz_action = nullptr;
       if (!callsign.isEmpty()) {
+        qrz_action = menu->addAction(tr("Look up %1 on QRZ").arg(callsign));
         ignore_action = menu->addAction(tr("Ignore station \"%1\"").arg(callsign));
       }
       menu->addAction (erase_action_);
       auto chosen = menu->exec (mapToGlobal (position));
-      if (chosen && chosen == ignore_action) {
+      if (chosen && chosen == qrz_action) {
+        QDesktopServices::openUrl(QUrl {"https://www.qrz.com/db/"
+                                        + QString::fromLatin1(QUrl::toPercentEncoding(callsign))});
+      } else if (chosen && chosen == ignore_action) {
         Q_EMIT ignoreCallsign(callsign);
       }
       delete menu;
@@ -126,6 +133,24 @@ QString DisplayText::callsignAt(QPoint const& position) const
   if (!callsign.contains(QRegularExpression{R"(\d)"})) return QString {};
   if (QRegularExpression{R"(^[A-R]{2}\d{2}([A-X]{2})?$)"}.match(callsign).hasMatch()) return QString {};
   if (!QRegularExpression{R"(^<?[A-Z0-9]+(?:/[A-Z0-9]+)*>?$)"}.match(callsign).hasMatch()) return QString {};
+  return callsign;
+}
+
+QString DisplayText::callsignForLookup(QPoint const& position) const
+{
+  auto callsign = callsignAt(position);
+  if (!callsign.isEmpty()) return callsign;
+
+  auto cursor = cursorForPosition(position);
+  if (cursor.isNull()) return QString {};
+  DecodedText message {cursor.block().text().trimmed().remove("TU; ")};
+  QString grid;
+  message.deCallAndGrid(callsign, grid);
+  callsign = callsign.trimmed().toUpper();
+  callsign.remove(QRegularExpression{R"(^[<>\[\]\(\)\{\},;:]+|[<>\[\]\(\)\{\},;:]+$)"});
+  if (!callsign.contains(QRegularExpression{R"([A-Z])"})) return QString {};
+  if (!callsign.contains(QRegularExpression{R"(\d)"})) return QString {};
+  if (!QRegularExpression{R"(^[A-Z0-9]+(?:/[A-Z0-9]+)*$)"}.match(callsign).hasMatch()) return QString {};
   return callsign;
 }
 
@@ -510,7 +535,8 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
                                      bool displayDXCCEntity, LogBook const& logBook,
                                      QString const& currentBand, bool ppfx, bool bCQonly,
                                      bool haveFSpread, float fSpread, bool bDisplayPoints,
-                                     int points, QString distance, bool alertsMuted)
+                                     int points, QString distance, bool alertsMuted,
+                                     bool bCQ73only, bool bPotaOnly)
 {
   m_points=points;
   m_bDisplayPoints=bDisplayPoints;
@@ -520,15 +546,20 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
   QColor fg;
   bool CQcall = false;
   auto is_73 = decodedText.messageWords().filter (QRegularExpression {"^(73|RR73)$"}).size();
-  if (decodedText.string ().contains (" CQ ")) {
+  bool is_cq_message = decodedText.string ().contains (" CQ ")
+      || decodedText.string ().contains (" CQDX ")
+      || decodedText.string ().contains (" QRZ ");
+  bool is_cq_pota = decodedText.messageText().contains(
+      QRegularExpression {R"(^CQ\s+POTA(?:\s|$))", QRegularExpression::CaseInsensitiveOption});
+  if (bPotaOnly && !is_cq_pota) return;
+  if (bCQ73only && !is_cq_message && !is_73) return;
+  if (bCQonly && !is_cq_message) return;
+  if (is_cq_message) {
     if (m_config->alert_CQ()) {
       if (!muted) play_CQ = true;
     }
   }
-  if (decodedText.string ().contains (" CQ ")
-      || decodedText.string ().contains (" CQDX ")
-      || decodedText.string ().contains (" QRZ ")
-      || (is_73 && (m_config->highlight_73 ())))
+  if (is_cq_message || (is_73 && (m_config->highlight_73 ())))
     {
       CQcall = true;
     }
