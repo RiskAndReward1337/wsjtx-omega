@@ -127,7 +127,7 @@ jobs:
               -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe \
               -DWSJT_GENERATE_DOCS=OFF \
               -DWSJT_ENABLE_OMNIRIG=OFF \
-              '-DWSJTX_EXTRA_CMAKE_OPTIONS=-DCMAKE_EXE_LINKER_FLAGS=-fopenmp;-DCMAKE_CXX_FLAGS=-Wno-error=maybe-uninitialized' \
+              -DWSJTX_EXTRA_CMAKE_OPTIONS=-DCMAKE_EXE_LINKER_FLAGS=-fopenmp \
               -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE
           bash scripts/run-with-heartbeat.sh 60 \
             cmake --build build-windows --target package --parallel 2
