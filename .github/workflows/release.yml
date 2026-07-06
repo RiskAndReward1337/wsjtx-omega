@@ -126,7 +126,8 @@ jobs:
               -DCMAKE_Fortran_COMPILER=/mingw64/bin/gfortran.exe \
               -DCMAKE_MAKE_PROGRAM=/mingw64/bin/ninja.exe \
               -DWSJT_GENERATE_DOCS=OFF \
-              -DWSJT_ENABLE_OMNIRIG=OFF
+              -DWSJT_ENABLE_OMNIRIG=OFF \
+              -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE
           bash scripts/run-with-heartbeat.sh 60 \
             cmake --build build-windows --target package --parallel 2
 
