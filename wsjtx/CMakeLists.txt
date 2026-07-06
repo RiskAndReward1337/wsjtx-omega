@@ -1304,6 +1304,13 @@ target_link_libraries (wsjt_fort  ${FFTW3_LIBRARIES})
 if (${OPENMP_FOUND} OR APPLE)
   add_library (wsjt_fort_omp STATIC ${wsjt_FSRCS})
   target_link_libraries (wsjt_fort_omp  ${FFTW3_LIBRARIES})
+  if (WIN32
+      AND CMAKE_Fortran_COMPILER_ID STREQUAL "GNU"
+      AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 16)
+    # MSYS2 GCC 16 emits .tls_common for this file's OpenMP threadprivate
+    # COMMON block, but current MinGW binutils rejects that pseudo-op.
+    set_source_files_properties (lib/map65_mmdec.f90 PROPERTIES COMPILE_FLAGS "-fno-openmp")
+  endif ()
   if (OpenMP_C_FLAGS AND NOT APPLE)
     set_target_properties (wsjt_fort_omp
       PROPERTIES
