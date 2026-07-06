@@ -330,6 +330,7 @@ namespace
     callsign = callsign.trimmed ().toUpper ();
     callsign.remove ("<");
     callsign.remove (">");
+    if (callsign == "..." || callsign.contains ("...")) return;
     if (callsign.isEmpty ()) return;
 
     if (!variants.contains (callsign)) variants << callsign;
@@ -352,6 +353,31 @@ namespace
         if (variants.contains (variant)) return true;
       }
     return false;
+  }
+
+  QString clean_auto_call_token (QString callsign)
+  {
+    callsign = callsign.trimmed ().toUpper ();
+    callsign.remove ("<");
+    callsign.remove (">");
+    if (callsign == "..." || callsign.contains ("...")) return {};
+    return callsign;
+  }
+
+  bool plausible_auto_callsign (QString callsign)
+  {
+    callsign = clean_auto_call_token (callsign);
+    if (callsign.length () < 3 || !callsign.contains (QRegExp("[0-9]"))) return false;
+
+    auto const& base = Radio::base_callsign (callsign).trimmed ().toUpper ();
+    return !base.isEmpty () && Radio::is_callsign (base);
+  }
+
+  bool own_auto_call (QString const& callsign, QString const& my_callsign, QString const& my_base)
+  {
+    auto const& variants = auto_call_variants (callsign);
+    return auto_call_variants_overlap (variants, my_callsign)
+      || auto_call_variants_overlap (variants, my_base);
   }
 
   QStringList pota_worked_keys (QString const& callsign, QString const& band)
@@ -7737,6 +7763,20 @@ void MainWindow::readFromStdout()                             //readFromStdout
 void MainWindow::auto_sequence (DecodedText const& message, unsigned start_tolerance, unsigned stop_tolerance)
 {
   auto const& message_words = message.messageWords ();
+  if ((ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()
+       || ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked())
+      && message.messageText().contains("...")) {
+    QString hashCall;
+    QString hashGrid;
+    message.deCallAndGrid(/*out*/ hashCall, hashGrid);
+    hashCall = clean_auto_call_token(hashCall);
+    if (!plausible_auto_callsign(hashCall)
+        || own_auto_call(hashCall, m_config.my_callsign(), m_baseCall)) {
+      autoLog(QString("AUTO_SEQ: ignoring unresolved hash decode  raw='%1'  hiscall='%2'")
+              .arg(message.messageText()).arg(hashCall));
+      return;
+    }
+  }
   auto is_73 = message_words.filter (QRegularExpression {"^(73|RR73)$"}).size();
   auto msg_no_hash = message.clean_string();
   msg_no_hash = msg_no_hash.mid(22).remove("<").remove(">");
@@ -9294,13 +9334,33 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   QString hiscall;
   QString hisgrid;
   message.deCallAndGrid(/*out*/hiscall,hisgrid);
+  hiscall = clean_auto_call_token (hiscall);
+  bool auto_cq_pota_only = (ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked())
+                           && !ui->cbAutoCall->isChecked() && !ui->cbAutoHunt->isChecked();
+  bool auto_mode_active = auto_cq_pota_only
+                          || ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked();
+  bool unresolved_hash_decode = message.messageText().contains("...")
+                                && (!plausible_auto_callsign(hiscall)
+                                    || own_auto_call(hiscall, m_config.my_callsign(), m_baseCall));
+  if (auto_mode_active && unresolved_hash_decode) {
+    autoLog(QString("PROCESS: ignoring unresolved hash decode  raw='%1'  hiscall='%2'")
+            .arg(message.messageText()).arg(hiscall));
+    if (m_bDoubleClicked) m_bDoubleClicked = false;
+    return;
+  }
 
   // prevent starting a QSO with yourself
-  if (m_bDoubleClicked && hiscall==m_baseCall) return;
+  if (m_bDoubleClicked && hiscall==m_baseCall) {
+    m_bDoubleClicked = false;
+    return;
+  }
 
   // don't call CQ when double-clicking on the final "73" message of your QSO
   if (m_bDoubleClicked && message.clean_string().remove("<").remove(">").contains((" " + m_baseCall + " "))
-      && message.clean_string().remove("<").remove(">").contains(" " + hiscall + " ") && message.clean_string().mid(22).contains(" 73")) return;
+      && message.clean_string().remove("<").remove(">").contains(" " + hiscall + " ") && message.clean_string().mid(22).contains(" 73")) {
+    m_bDoubleClicked = false;
+    return;
+  }
 
   if(message.clean_string ().contains(hiscall+"/R")) {
     hiscall+="/R";
@@ -9326,8 +9386,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     }
     return false;
   };
-  if ((ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()
-       || ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked())
+  if (auto_mode_active
       && isAutoIgnoredDecode(hiscall)) {
     return;
   }
@@ -9353,8 +9412,29 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   // Auto CQ / Auto POTA: once we have picked a station to work, do not let a
   // different caller replace that target mid-handshake.  Queue them as the next
   // tail-ender instead.
-  if ((ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked())
-      && !ui->cbAutoCall->isChecked() && !ui->cbAutoHunt->isChecked()) {
+  if (auto_cq_pota_only && m_bDoubleClicked) {
+    QString currentTarget = ui->dxCallEntry->text().trimmed();
+    bool switchingTarget = !currentTarget.isEmpty()
+                           && plausible_auto_callsign(hiscall)
+                           && !auto_call_variants_overlap(auto_call_variants(hiscall), currentTarget);
+    if (switchingTarget) {
+      autoLog(QString("MANUAL_OVERRIDE: switching AutoCQ/POTA target from '%1' to clicked '%2'")
+              .arg(currentTarget).arg(hiscall));
+      stopWRTimer.stop();
+      m_tailenderCall.clear();
+      m_tailenderGrid.clear();
+      m_tailenderRpt.clear();
+      m_tailenderFreq = 0;
+      m_tailenderTxFirst = false;
+      m_autoTailWindowActive = false;
+      m_sentFirst73 = false;
+      m_bSentReport = false;
+      m_bCallingCQ = false;
+      m_QSOProgress = CALLING;
+    }
+  }
+
+  if (auto_cq_pota_only) {
     QString currentTarget = ui->dxCallEntry->text().trimmed();
     bool lockedToOtherStation = !currentTarget.isEmpty()
                                 && currentTarget != hiscall
@@ -9362,7 +9442,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
                                 && (m_bCallingCQ || m_QSOProgress > CALLING
                                     || m_transmitting || g_iptt == 1 || m_btxok);
     bool messageForMe = message_words.contains(m_baseCall) || message_words.contains(m_config.my_callsign());
-    if (lockedToOtherStation && messageForMe && !is_73) {
+    if (!m_bDoubleClicked && lockedToOtherStation && messageForMe && !is_73) {
       if (m_tailenderCall.isEmpty() || m_tailenderCall == currentTarget) {
         m_tailenderCall = hiscall;
         m_tailenderFreq = message.frequencyOffset();
@@ -9815,6 +9895,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
 
   bool auto_cq_pota_active = ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked();
   bool freeze_auto_cq_report = auto_cq_pota_active
+                               && !m_bDoubleClicked
                                && (m_transmitting || g_iptt == 1 || m_btxok)
                                && (m_QSOProgress > CALLING);
   if ((!freeze_auto_cq_report)
@@ -9840,6 +9921,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   // with a slightly different SNR, regenerate tx2 with a new content, and reset the watchdog
   // — causing an infinite loop against stations we can decode but who cannot hear us.
   bool freeze_genStdMsgs = auto_cq_pota_active
+                            && !m_bDoubleClicked
                             && (m_transmitting || g_iptt == 1 || m_btxok)
                             && (m_QSOProgress > CALLING);
   if (!m_nTx73 and !m_bTUmsg and !freeze_genStdMsgs) {
@@ -9857,7 +9939,9 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   if (auto_seq && !m_bDoubleClicked && m_mode!="FT4" && m_mode!="FT2") {
     return;
   }
-  if(m_config.quick_call() && m_bDoubleClicked) auto_tx_mode(true);
+  if (auto_cq_pota_active && m_bDoubleClicked && !modifiers.testFlag(Qt::AltModifier)) {
+    auto_tx_mode(true);
+  } else if(m_config.quick_call() && m_bDoubleClicked) auto_tx_mode(true);
   m_bDoubleClicked=false;
 }
 
@@ -18490,19 +18574,20 @@ bool MainWindow::callsignFiltered(DecodedText dt)
     auto const& message_words = dt.messageWords();
 
     dt.deCallAndGrid(/*out*/ dxCall, dxGrid);
+    dxCall = clean_auto_call_token (dxCall);
     QStringList callVariants;
     append_auto_call_variant(callVariants, dxCall);
     auto normalizedWord = [](QString word) {
-        return Radio::base_callsign(word.remove("<").remove(">"));
+        word = clean_auto_call_token (word);
+        if (word.isEmpty ()) return QString {};
+        return Radio::base_callsign(word);
     };
     QString myBase = Radio::base_callsign(m_config.my_callsign());
     QStringList rawTokens = dt.messageText().split(" ", SkipEmptyParts);
     QStringList rawCallTokens;
     for (QString const& token : rawTokens) {
-        QString rawToken = token;
-        rawToken.remove("<");
-        rawToken.remove(">");
-        rawToken = rawToken.trimmed().toUpper();
+        QString rawToken = clean_auto_call_token (token);
+        if (rawToken.isEmpty ()) continue;
         QString normalized = normalizedWord(token);
         if (normalized == "CQ" || normalized == "QRZ" || normalized == "DE"
             || normalized == "RR73" || normalized == "73") {
@@ -18530,13 +18615,15 @@ bool MainWindow::callsignFiltered(DecodedText dt)
     if (!callingStation.isEmpty()
         && callingStation != m_baseCall
         && callingStation != myBase
+        && plausible_auto_callsign (callingStation)
         && callingStation != addressedStation) {
         candidateCall = callingStation;
     }
     append_auto_call_variant(callVariants, candidateCall);
 
     // Require a plausible callsign (must contain a digit and be at least 3 chars)
-    if (!candidateCall.contains(QRegExp("[0-9]")) || candidateCall.length() < 3) {
+    if (!plausible_auto_callsign(candidateCall)
+        || own_auto_call(candidateCall, m_config.my_callsign(), m_baseCall)) {
         bool postSignoffWindow = (g_iptt == 1 && (m_ntx == 4 || m_ntx == 5))
                                  || m_sentFirst73
                                  || m_autoTailWindowActive;
