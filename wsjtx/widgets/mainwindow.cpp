@@ -325,6 +325,65 @@ namespace
           || (type == 6 && !msg_parts.filter ("73").isEmpty ()));
   }
 
+  void append_auto_call_variant (QStringList& variants, QString callsign)
+  {
+    callsign = callsign.trimmed ().toUpper ();
+    callsign.remove ("<");
+    callsign.remove (">");
+    if (callsign.isEmpty ()) return;
+
+    if (!variants.contains (callsign)) variants << callsign;
+
+    auto base = Radio::base_callsign (callsign).trimmed ().toUpper ();
+    if (!base.isEmpty () && !variants.contains (base)) variants << base;
+  }
+
+  QStringList auto_call_variants (QString const& callsign)
+  {
+    QStringList variants;
+    append_auto_call_variant (variants, callsign);
+    return variants;
+  }
+
+  bool auto_call_variants_overlap (QStringList const& variants, QString const& callsign)
+  {
+    for (auto const& variant : auto_call_variants (callsign))
+      {
+        if (variants.contains (variant)) return true;
+      }
+    return false;
+  }
+
+  QStringList pota_worked_keys (QString const& callsign, QString const& band)
+  {
+    QStringList keys;
+    for (auto const& variant : auto_call_variants (callsign))
+      {
+        auto key = variant + ":" + band;
+        if (!keys.contains (key)) keys << key;
+      }
+    return keys;
+  }
+
+  QString pota_worked_key_match (QSet<QString> const& worked, QString const& callsign, QString const& band)
+  {
+    for (auto const& key : pota_worked_keys (callsign, band))
+      {
+        if (worked.contains (key)) return key;
+      }
+    return {};
+  }
+
+  QString pota_worked_key_match (QSet<QString> const& worked, QStringList const& callsigns, QString const& band)
+  {
+    for (auto const& callsign : callsigns)
+      {
+        auto key = pota_worked_key_match (worked, callsign, band);
+        if (!key.isEmpty ()) return key;
+      }
+    return {};
+  }
+
   int ms_minute_error ()
   {
     auto const& now = QDateTime::currentDateTimeUtc ();
@@ -7042,7 +7101,8 @@ void MainWindow::readFromStdout()                             //readFromStdout
           auto const& huntWords = decodedtext.messageWords();
           if (!huntWords.contains("CQ POTA")) {
             huntPanelFiltered = true;
-          } else if (!huntCall.isEmpty() && m_potaWorkedToday.contains(huntCall + ":" + m_currentBand)) {
+          } else if (!huntCall.isEmpty()
+                     && !pota_worked_key_match(m_potaWorkedToday, huntCall, m_currentBand).isEmpty()) {
             huntPanelFiltered = true;
             autoLog(QString("HUNT_PANEL: hiding %1 (worked on %2)").arg(huntCall).arg(m_currentBand));
           }
@@ -9252,17 +9312,17 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   }
 
   auto isAutoIgnoredDecode = [&](QString const& callsign) {
-    QString normalized = callsign.trimmed().toUpper();
-    QString base = Radio::base_callsign(callsign).trimmed().toUpper();
-    for (QString const& key : {normalized, base}) {
-      if (key.isEmpty() || !m_autoIgnored.contains(key)) continue;
-      QDateTime expiry = m_autoIgnored.value(key);
+    QStringList decodeVariants = auto_call_variants(callsign);
+    for (auto it = m_autoIgnored.begin(); it != m_autoIgnored.end(); ++it) {
+      if (!auto_call_variants_overlap(decodeVariants, it.key())) continue;
+      QDateTime expiry = it.value();
       if (!expiry.isValid() || QDateTime::currentDateTimeUtc() < expiry) {
-        autoLog(QString("PROCESS: %1 SKIP (auto-ignored)").arg(key));
+        autoLog(QString("PROCESS: %1 SKIP (auto-ignored as %2)").arg(callsign).arg(it.key()));
         return true;
       }
-      m_autoIgnored.remove(key);
+      m_autoIgnored.remove(it.key());
       refreshAutoIgnoredList();
+      break;
     }
     return false;
   };
@@ -11002,22 +11062,32 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
 
   // Auto CQ / Auto Call: record last QSO partner so we don't immediately call them again,
   // then auto-accept the log dialog and reset counters for the next cycle
-  if (m_lastCall != completedCall) {
+  QStringList completedCallVariants = auto_call_variants(completedCall);
+  if (!auto_call_variants_overlap(completedCallVariants, m_lastCall)) {
       m_lastCall = completedCall;
       if (ui->cbAutoCQ->isChecked() || ui->cbAutoCall->isChecked() || ui->cbAutoPOTA->isChecked()) {
           // Preserve a queued tail-ender for Auto CQ/POTA if it is a different
           // station than the QSO we just completed.
           if (ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()) {
-              if (m_priorityCall == completedCall) {
+              if (auto_call_variants_overlap(completedCallVariants, m_priorityCall)) {
                   m_priorityCall.clear();
               }
-          } else if (m_priorityCall.isEmpty() || m_priorityCall == completedCall) {
+          } else if (m_priorityCall.isEmpty()
+                     || auto_call_variants_overlap(completedCallVariants, m_priorityCall)) {
               resetAutoSwitch();
           }
       }
   }
   // QSO completed successfully — clear auto-ignore for this station (they responded!)
-  m_autoIgnored.remove(completedCall);
+  QStringList autoIgnoreKeysToRemove;
+  for (auto it = m_autoIgnored.begin(); it != m_autoIgnored.end(); ++it) {
+      if (auto_call_variants_overlap(completedCallVariants, it.key())) {
+          autoIgnoreKeysToRemove << it.key();
+      }
+  }
+  for (auto const& autoIgnoreKey : autoIgnoreKeysToRemove) {
+      m_autoIgnored.remove(autoIgnoreKey);
+  }
   m_autoCallTarget.clear();
   autoLog(QString("LOG_QSO: completedCall='%1'  completedBand='%2'  autoHunt=%3")
           .arg(completedCall).arg(completedBand).arg(ui->cbAutoHunt->isChecked()));
@@ -11028,9 +11098,11 @@ void MainWindow::on_logQSOButton_clicked()                 //Log QSO button
           m_potaWorkedToday.clear();
           m_potaLastDate = today;
       }
-      QString workedKey = completedCall + ":" + completedBand;
-      m_potaWorkedToday.insert(workedKey);
-      autoLog(QString("LOG_QSO: inserted '%1' into potaWorkedToday (size=%2)").arg(workedKey).arg(m_potaWorkedToday.size()));
+      QStringList workedKeys = pota_worked_keys(completedCall, completedBand);
+      for (auto const& workedKey : workedKeys) {
+          m_potaWorkedToday.insert(workedKey);
+      }
+      autoLog(QString("LOG_QSO: inserted '%1' into potaWorkedToday (size=%2)").arg(workedKeys.join(",")).arg(m_potaWorkedToday.size()));
       refreshPotaWorkedList();
   }
 
@@ -18314,10 +18386,14 @@ void MainWindow::ZProcess()
     // If a priority call was identified this period and Auto Call/Hunt is enabled,
     // and we're not already in a QSO, initiate a call to the priority station
     bool autoCallActive = ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked();
+    QStringList priorityCallVariants = auto_call_variants(m_priorityCall);
+    bool priorityAlreadyWorked = auto_call_variants_overlap(priorityCallVariants, m_lastCall);
+    bool dxEntryEmptyOrPriority = ui->dxCallEntry->text().isEmpty()
+                                  || auto_call_variants_overlap(priorityCallVariants, ui->dxCallEntry->text());
     if (!ui->autoButton->isChecked() && autoCallActive
             && !m_priorityCall.isNull() && !m_priorityCall.isEmpty()
-            && m_lastCall != m_priorityCall
-            && (ui->dxCallEntry->text().isEmpty() || ui->dxCallEntry->text() == m_priorityCall)) {
+            && !priorityAlreadyWorked
+            && dxEntryEmptyOrPriority) {
 
         autoLog(QString("ZProcess: CALLING %1  grid=%2  freq=%3  txFirst=%4")
                 .arg(m_priorityCall).arg(m_prioGrid).arg(m_prioFreq).arg(m_prioTxFirst));
@@ -18414,6 +18490,8 @@ bool MainWindow::callsignFiltered(DecodedText dt)
     auto const& message_words = dt.messageWords();
 
     dt.deCallAndGrid(/*out*/ dxCall, dxGrid);
+    QStringList callVariants;
+    append_auto_call_variant(callVariants, dxCall);
     auto normalizedWord = [](QString word) {
         return Radio::base_callsign(word.remove("<").remove(">"));
     };
@@ -18421,12 +18499,18 @@ bool MainWindow::callsignFiltered(DecodedText dt)
     QStringList rawTokens = dt.messageText().split(" ", SkipEmptyParts);
     QStringList rawCallTokens;
     for (QString const& token : rawTokens) {
+        QString rawToken = token;
+        rawToken.remove("<");
+        rawToken.remove(">");
+        rawToken = rawToken.trimmed().toUpper();
         QString normalized = normalizedWord(token);
         if (normalized == "CQ" || normalized == "QRZ" || normalized == "DE"
             || normalized == "RR73" || normalized == "73") {
             continue;
         }
         if (Radio::is_callsign(normalized)) {
+            append_auto_call_variant(callVariants, rawToken);
+            append_auto_call_variant(callVariants, normalized);
             rawCallTokens << normalized;
         }
     }
@@ -18449,6 +18533,7 @@ bool MainWindow::callsignFiltered(DecodedText dt)
         && callingStation != addressedStation) {
         candidateCall = callingStation;
     }
+    append_auto_call_variant(callVariants, candidateCall);
 
     // Require a plausible callsign (must contain a digit and be at least 3 chars)
     if (!candidateCall.contains(QRegExp("[0-9]")) || candidateCall.length() < 3) {
@@ -18470,13 +18555,20 @@ bool MainWindow::callsignFiltered(DecodedText dt)
     dxCall = candidateCall;
 
     // Auto-ignore list: skip stations that didn't respond and haven't timed out yet
-    if (m_autoIgnored.contains(dxCall)) {
-        QDateTime expiry = m_autoIgnored.value(dxCall);
+    QString autoIgnoredCall;
+    for (auto it = m_autoIgnored.begin(); it != m_autoIgnored.end(); ++it) {
+        if (auto_call_variants_overlap(callVariants, it.key())) {
+            autoIgnoredCall = it.key();
+            break;
+        }
+    }
+    if (!autoIgnoredCall.isEmpty()) {
+        QDateTime expiry = m_autoIgnored.value(autoIgnoredCall);
         if (!expiry.isValid() || QDateTime::currentDateTimeUtc() < expiry) {
-            autoLog(QString("FILTER: %1 SKIP (auto-ignored)").arg(dxCall));
+            autoLog(QString("FILTER: %1 SKIP (auto-ignored as %2)").arg(dxCall).arg(autoIgnoredCall));
             return true;  // still ignored
         }
-        m_autoIgnored.remove(dxCall);  // expired — remove and allow through
+        m_autoIgnored.remove(autoIgnoredCall);  // expired — remove and allow through
     }
 
     int nmod = fmod(double(dt.timeInSeconds()), 2.0 * m_TRperiod);
@@ -18491,7 +18583,7 @@ bool MainWindow::callsignFiltered(DecodedText dt)
     // just-worked station cannot immediately pull us back in with another decode.
     // Exception: Auto Hunt must still apply the worked-today filter so a just-worked
     // POTA station is not immediately re-called while m_hisCall is still set.
-    if (!ui->cbAutoHunt->isChecked() && m_hisCall == dxCall) return false;
+    if (!ui->cbAutoHunt->isChecked() && auto_call_variants_overlap(callVariants, m_hisCall)) return false;
 
     // Determine whether the decode passes all active filters
     bool passedFilters = false;
@@ -18506,7 +18598,12 @@ bool MainWindow::callsignFiltered(DecodedText dt)
         {
             QStringList ignored = ui->pte_IgnoredStations->toPlainText()
                                       .split(QRegExp("[\r\n]"), SkipEmptyParts);
-            if (ignored.contains(dxCall)) return true;
+            for (QString& ignoredCall : ignored) {
+                ignoredCall = ignoredCall.trimmed().toUpper();
+            }
+            for (auto const& ignoredCall : ignored) {
+                if (auto_call_variants_overlap(callVariants, ignoredCall)) return true;
+            }
         }
 
         // Minimum signal strength
@@ -18569,6 +18666,34 @@ bool MainWindow::callsignFiltered(DecodedText dt)
                             continentB4onBand, CQZoneB4onBand, ITUZoneB4onBand,
                             m_currentBand);
 
+            for (auto const& variantCall : callVariants) {
+                if (variantCall == dxCall) continue;
+
+                bool variantCallB4 = false;
+                bool variantCallB4onBand = false;
+                bool variantCountryB4 = false;
+                bool variantCountryB4onBand = false;
+                bool variantGridB4 = false;
+                bool variantGridB4onBand = false;
+                bool variantContinentB4 = false;
+                bool variantContinentB4onBand = false;
+                bool variantCQZoneB4 = false;
+                bool variantCQZoneB4onBand = false;
+                bool variantITUZoneB4 = false;
+                bool variantITUZoneB4onBand = false;
+                auto const& variantLookedUp = m_logBook.countries()->lookup(variantCall);
+                m_logBook.match(variantCall, m_mode, dxGrid, variantLookedUp,
+                                variantCallB4, variantCountryB4, variantGridB4,
+                                variantContinentB4, variantCQZoneB4, variantITUZoneB4);
+                m_logBook.match(variantCall, m_mode, dxGrid, variantLookedUp,
+                                variantCallB4onBand, variantCountryB4onBand,
+                                variantGridB4onBand, variantContinentB4onBand,
+                                variantCQZoneB4onBand, variantITUZoneB4onBand,
+                                m_currentBand);
+                callB4 = callB4 || variantCallB4;
+                callB4onBand = callB4onBand || variantCallB4onBand;
+            }
+
             if (ui->cb_callB4->isChecked()           && callB4)            return true;
             if (ui->cb_callB4onBand->isChecked()      && callB4onBand)      return true;
             if (ui->cb_countryB4->isChecked()         && countryB4)         return true;
@@ -18614,8 +18739,8 @@ bool MainWindow::callsignFiltered(DecodedText dt)
         bool can_immediately_seize_caller = ready_to_work_now
                                             && is_for_me
                                             && !is_73
-                                            && tailenderCall != m_hisCall
-                                            && tailenderCall != m_lastCall;
+                                            && !auto_call_variants_overlap(auto_call_variants(tailenderCall), m_hisCall)
+                                            && !auto_call_variants_overlap(auto_call_variants(tailenderCall), m_lastCall);
         if (can_immediately_seize_caller) {
             m_tailenderCall = tailenderCall;
             m_tailenderFreq = dt.frequencyOffset();
@@ -18644,8 +18769,8 @@ bool MainWindow::callsignFiltered(DecodedText dt)
         bool can_queue_tailender = finishing_qso
                                    && is_for_me
                                    && !is_73
-                                   && tailenderCall != m_hisCall
-                                   && tailenderCall != m_lastCall;
+                                   && !auto_call_variants_overlap(auto_call_variants(tailenderCall), m_hisCall)
+                                   && !auto_call_variants_overlap(auto_call_variants(tailenderCall), m_lastCall);
         if (can_queue_tailender) {
             m_tailenderCall = tailenderCall;
             m_tailenderFreq = dt.frequencyOffset();
@@ -18674,9 +18799,9 @@ bool MainWindow::callsignFiltered(DecodedText dt)
             autoLog(QString("HUNT_FILTER: %1 SKIP (not CQ POTA)").arg(dxCall));
             return false;
         }
-        QString workedKey = dxCall + ":" + m_currentBand;
-        if (m_potaWorkedToday.contains(workedKey)) {
-            autoLog(QString("HUNT_FILTER: %1 SKIP (worked today on %2)").arg(dxCall).arg(m_currentBand));
+        QString workedKey = pota_worked_key_match(m_potaWorkedToday, callVariants, m_currentBand);
+        if (!workedKey.isEmpty()) {
+            autoLog(QString("HUNT_FILTER: %1 SKIP (worked today on %2 as %3)").arg(dxCall).arg(m_currentBand).arg(workedKey));
             return true;
         }
         autoLog(QString("HUNT_FILTER: %1 PASS (CQ POTA, not yet worked on %2)").arg(dxCall).arg(m_currentBand));
