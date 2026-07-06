@@ -1123,7 +1123,7 @@ set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror -Wall -Wextra -fexceptions -frt
 
 if (NOT APPLE)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-pragmas")
-  if (${OPENMP_FOUND})
+  if (OPENMP_FOUND)
     if (OpenMP_C_FLAGS)
       set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_C_FLAGS}")
       set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
@@ -1301,7 +1301,7 @@ target_link_libraries (wsjt_cxx ${LIBM_LIBRARIES} Boost::log_setup ${LIBM_LIBRAR
 # build an OpenMP variant of the Fortran library routines
 add_library (wsjt_fort STATIC ${wsjt_FSRCS})
 target_link_libraries (wsjt_fort  ${FFTW3_LIBRARIES})
-if (${OPENMP_FOUND} OR APPLE)
+if (OPENMP_FOUND OR APPLE)
   add_library (wsjt_fort_omp STATIC ${wsjt_FSRCS})
   target_link_libraries (wsjt_fort_omp  ${FFTW3_LIBRARIES})
   if (WIN32
@@ -1331,7 +1331,7 @@ if (${OPENMP_FOUND} OR APPLE)
       $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>   # assumes GNU style Fortran compiler
       )
   endif (APPLE)
-endif (${OPENMP_FOUND} OR APPLE)
+endif ()
 
 if(WSJT_BUILD_UTILS) 
 
@@ -1628,7 +1628,7 @@ add_executable (record_time_signal Audio/tools/record_time_signal.cpp)
 target_link_libraries (record_time_signal wsjt_cxx wsjt_qtmm wsjt_qt)
 
 add_executable (jt9 ${jt9_FSRCS} ${jt9_VERSION_RESOURCES})
-if (${OPENMP_FOUND} OR APPLE)
+if (OPENMP_FOUND OR APPLE)
   if (APPLE)
     # On  Mac  we don't  have  working  OpenMP  support in  the  C/C++
     # compilers so we  have to manually set the  correct linking flags
@@ -1642,7 +1642,7 @@ if (${OPENMP_FOUND} OR APPLE)
       PRIVATE
       $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>   # assumes GNU style Fortran compiler
       )
-  else (APPLE)
+  else ()
     if (OpenMP_C_FLAGS)
       set_target_properties (jt9
         PROPERTIES
@@ -1654,16 +1654,16 @@ if (${OPENMP_FOUND} OR APPLE)
       PROPERTIES
       Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/fortran_modules_omp
       )
-  endif (APPLE)
+  endif ()
   if (WIN32)
     set_target_properties (jt9 PROPERTIES
       LINK_FLAGS -Wl,--stack,16777216
       )
   endif ()
   target_link_libraries (jt9 wsjt_fort_omp wsjt_cxx fort_qt)
-else (${OPENMP_FOUND} OR APPLE)
+else ()
   target_link_libraries (jt9 wsjt_fort wsjt_cxx fort_qt)
-endif (${OPENMP_FOUND} OR APPLE)
+endif ()
 
 if (WIN32)
   find_package (Portaudio REQUIRED)
@@ -1704,7 +1704,7 @@ set_target_properties (wsjtx PROPERTIES
   )
 
 target_include_directories (wsjtx PRIVATE ${FFTW3_INCLUDE_DIRS})
-if ((NOT ${OPENMP_FOUND}) OR APPLE)
+if ((NOT OPENMP_FOUND) OR APPLE)
   target_link_libraries (wsjtx wsjt_fort)
 else ()
   target_link_libraries (wsjtx wsjt_fort_omp)
