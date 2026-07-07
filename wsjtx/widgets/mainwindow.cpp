@@ -317,6 +317,55 @@ namespace
   constexpr int default_rx_audio_buffer_frames {-1}; // lets Qt decide
   constexpr int default_tx_audio_buffer_frames {-1}; // lets Qt decide
 
+  QString compass_heading (int azimuth)
+  {
+    static QString const headings[] {
+      "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"
+    };
+
+    auto normalized = azimuth % 360;
+    if (normalized < 0) normalized += 360;
+    auto index = static_cast<int> ((normalized + 11.25) / 22.5) % 16;
+    return headings[index];
+  }
+
+  QString distance_bearing_heading_text (Configuration const& config, QString const& de_grid)
+  {
+    if (!(config.showDistance () || config.showAzimuth () || config.showHeading ())
+        || !de_grid.contains (grid_regexp))
+      {
+        return {};
+      }
+
+    double utch=0.0;
+    int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
+    QString my_Grid = config.my_grid ();
+    if (my_Grid.length () < 5) my_Grid = config.my_grid ().left (4) + "mm";
+    QString de_Grid = de_grid.left (4) + "mm";
+    azdist_(const_cast <char *> (my_Grid.toLatin1 ().constData ()),
+            const_cast <char *> (de_Grid.toLatin1 ().constData ()),&utch,
+            &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
+
+    QStringList parts;
+    if (config.showDistance ())
+      {
+        auto const nd = config.miles () ? nDmiles : nDkm;
+        parts << QString::number (nd) + (config.miles () ? " mi" : " km");
+      }
+    if (config.showAzimuth ())
+      {
+        auto bearing = QString::number (nAz) + "°";
+        if (config.showHeading ()) bearing += " " + compass_heading (nAz);
+        parts << bearing;
+      }
+    else if (config.showHeading ())
+      {
+        parts << compass_heading (nAz);
+      }
+    return parts.join (" / ");
+  }
+
   bool message_is_73 (int type, QStringList const& msg_parts)
   {
     return type >= 0
@@ -3342,27 +3391,7 @@ void MainWindow::fastSink(qint64 frames)
         QString deCall;
         QString deGrid;
         decodedtext.deCallAndGrid(deCall,deGrid);
-        if ((m_config.showDistance() || m_config.showAzimuth()) && deGrid.contains(grid_regexp)) {
-            double utch=0.0;
-            int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
-            QString my_Grid = m_config.my_grid();
-            if (my_Grid.length() < 5) my_Grid = m_config.my_grid().left(4)+"mm";
-            QString de_Grid= deGrid.left(4)+"mm";
-            azdist_(const_cast <char *> (my_Grid.toLatin1().constData()),
-                    const_cast <char *> (de_Grid.toLatin1().constData()),&utch,
-                    &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
-            if (m_config.showDistance()) {
-                int nd=nDkm;
-                if(m_config.miles()) nd=nDmiles;
-                distance = QString::number(nd);
-                if(m_config.miles()) distance += " mi";
-                if(!m_config.miles()) distance += " km";
-            }
-            if (m_config.showAzimuth()) {
-                if (distance.length()) distance += " / ";
-                distance += QString::number(nAz) + "°";
-            }
-        }
+        distance = distance_bearing_heading_text (m_config, deGrid);
 
         // mute audible alerts when callsign is on the Ignored List for MSK144
         if (m_config.alert_Enabled() && !ui->cbBypass->isChecked() && deCall!="" && ignoreList.contains(deCall + ",")) m_muted = true;
@@ -7140,27 +7169,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
           QString deCall;
           QString deGrid;
           decodedtext.deCallAndGrid(deCall,deGrid);
-          if ((m_config.showDistance() || m_config.showAzimuth()) && deGrid.contains(grid_regexp)) {
-            double utch=0.0;
-            int nAz,nEl,nDmiles,nDkm,nHotAz,nHotABetter;
-            QString my_Grid = m_config.my_grid();
-            if (my_Grid.length() < 5) my_Grid = m_config.my_grid().left(4)+"mm";
-            QString de_Grid= deGrid.left(4)+"mm";
-            azdist_(const_cast <char *> (my_Grid.toLatin1().constData()),
-                    const_cast <char *> (de_Grid.toLatin1().constData()),&utch,
-                    &nAz,&nEl,&nDmiles,&nDkm,&nHotAz,&nHotABetter,(FCL)6,(FCL)6);
-            if (m_config.showDistance()) {
-                int nd=nDkm;
-                if(m_config.miles()) nd=nDmiles;
-                distance = QString::number(nd);
-                if(m_config.miles()) distance += " mi";
-                if(!m_config.miles()) distance += " km";
-            }
-            if (m_config.showAzimuth()) {
-                if (distance.length()) distance += " / ";
-                distance += QString::number(nAz) + "°";
-            }
-          }
+          distance = distance_bearing_heading_text (m_config, deGrid);
 
           // display country names for JT65 and JT9 like for FT8
           if ((m_mode == "JT65" or m_mode == "JT9" or m_mode == "JT4") && m_config.DXCC()) {

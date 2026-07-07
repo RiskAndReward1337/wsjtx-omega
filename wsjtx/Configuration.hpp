@@ -211,6 +211,7 @@ public:
   bool Wait_features_enabled () const;
   bool showDistance() const ;
   bool showAzimuth() const ;
+  bool showHeading() const ;
   bool align() const;
   bool repeat_Tx () const;
   bool auto_astro () const;

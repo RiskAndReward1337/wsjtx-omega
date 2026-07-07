@@ -914,6 +914,7 @@ private:
   bool Wait_features_enabled_;
   bool showDistance_;
   bool showAzimuth_;
+  bool showHeading_;
   bool align_;
   bool repeat_Tx_;
   bool auto_astro_;
@@ -1091,6 +1092,7 @@ bool Configuration::band_hopping_every_minute () const {return m_->band_hopping_
 bool Configuration::Wait_features_enabled () const {return m_->Wait_features_enabled_;}
 bool Configuration::showDistance() const {return m_->showDistance_;}
 bool Configuration::showAzimuth() const {return m_->showAzimuth_;}
+bool Configuration::showHeading() const {return m_->showHeading_;}
 bool Configuration::align() const {return m_->align_;}
 bool Configuration::repeat_Tx () const {return m_->repeat_Tx_;}
 bool Configuration::auto_astro () const {return m_->auto_astro_;}
@@ -2196,6 +2198,7 @@ void Configuration::impl::initialize_models ()
   ui_->enable_Wait_features_check_box->setChecked(Wait_features_enabled_);
   ui_->cb_showDistance->setChecked(showDistance_);
   ui_->cb_showAzimuth->setChecked(showAzimuth_);
+  ui_->cb_showHeading->setChecked(showHeading_);
   ui_->cb_Align->setChecked(align_);
   ui_->repeat_Tx_check_box->setChecked(repeat_Tx_);
   ui_->auto_astro_check_box->setChecked(auto_astro_);
@@ -2639,6 +2642,7 @@ void Configuration::impl::read_settings ()
   Wait_features_enabled_ = settings_->value("WaitFeaturesEnabled",true).toBool ();
   showDistance_ = settings_->value("showDistance", false).toBool();
   showAzimuth_ = settings_->value("showAzimuth", false).toBool();
+  showHeading_ = settings_->value("showHeading", false).toBool();
   align_ = settings_->value("AlignDistanceAzimuth", true).toBool();
   repeat_Tx_ = settings_->value("RepeatTx",false).toBool ();
   auto_astro_ = settings_->value("AutoAstroWindow",false).toBool ();
@@ -2912,6 +2916,7 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("WaitFeaturesEnabled", Wait_features_enabled_);
   settings_->setValue ("showDistance", showDistance_);
   settings_->setValue ("showAzimuth", showAzimuth_);
+  settings_->setValue ("showHeading", showHeading_);
   settings_->setValue ("AlignDistanceAzimuth", align_);
   settings_->setValue ("RepeatTx", repeat_Tx_);
   settings_->setValue ("AutoAstroWindow", auto_astro_);
@@ -3502,6 +3507,7 @@ void Configuration::impl::accept ()
   Wait_features_enabled_ = ui_->enable_Wait_features_check_box->isChecked ();
   showDistance_ = ui_->cb_showDistance->isChecked();
   showAzimuth_ = ui_->cb_showAzimuth->isChecked();
+  showHeading_ = ui_->cb_showHeading->isChecked();
   align_ = ui_->cb_Align->isChecked();
   repeat_Tx_ = ui_->repeat_Tx_check_box->isChecked ();
   auto_astro_ = ui_->auto_astro_check_box->isChecked ();

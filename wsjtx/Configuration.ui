@@ -675,6 +675,16 @@ quiet period when decoding is done.</string>
             </property>
            </widget>
           </item>
+          <item row="5" column="1">
+           <widget class="QCheckBox" name="cb_showHeading">
+            <property name="toolTip">
+             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If a station sends a valid Maidenhead locator, calculate and show the compass heading in Band Activity pane.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+            </property>
+            <property name="text">
+             <string>Show heading in messages with grid</string>
+            </property>
+           </widget>
+          </item>
           <item row="4" column="4">
            <widget class="QSpinBox" name="align_spin_box2">
             <property name="toolTip">
