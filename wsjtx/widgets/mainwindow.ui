@@ -4181,6 +4181,90 @@ Double-click to reset to the standard 73 message</string>
                      </widget>
                     </item>
                     <item>
+                     <widget class="QGroupBox" name="groupBox_postQSOCallers">
+                      <property name="toolTip">
+                       <string>Options for callers heard immediately after an automated QSO finishes.</string>
+                      </property>
+                      <property name="title">
+                       <string>Post-QSO Callers</string>
+                      </property>
+                      <layout class="QVBoxLayout" name="verticalLayout_postQSOCallers">
+                       <property name="spacing">
+                        <number>2</number>
+                       </property>
+                       <property name="leftMargin">
+                        <number>5</number>
+                       </property>
+                       <property name="topMargin">
+                        <number>3</number>
+                       </property>
+                       <property name="rightMargin">
+                        <number>5</number>
+                       </property>
+                       <property name="bottomMargin">
+                        <number>3</number>
+                       </property>
+                       <item>
+                        <widget class="QCheckBox" name="cb_workPostQSOCallers">
+                         <property name="toolTip">
+                          <string>Queue stations calling us right after an automated QSO and work them when free. Auto Call/Hunt CQ priority still wins first.</string>
+                         </property>
+                         <property name="text">
+                          <string>Work callers after QSO</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QGroupBox" name="groupBox_autoPotaDualHandoff">
+                      <property name="toolTip">
+                       <string>Use the FT8 DXpedition packed message format to finish one Auto POTA QSO and send the next queued caller a report in the same single-stream transmission.</string>
+                      </property>
+                      <property name="title">
+                       <string>Auto POTA Dual Handoff</string>
+                      </property>
+                      <layout class="QVBoxLayout" name="verticalLayout_autoPotaDualHandoff">
+                       <property name="spacing">
+                        <number>2</number>
+                       </property>
+                       <property name="leftMargin">
+                        <number>5</number>
+                       </property>
+                       <property name="topMargin">
+                        <number>3</number>
+                       </property>
+                       <property name="rightMargin">
+                        <number>5</number>
+                       </property>
+                       <property name="bottomMargin">
+                        <number>3</number>
+                       </property>
+                       <item>
+                        <widget class="QCheckBox" name="cb_autoPotaDualHandoff">
+                         <property name="toolTip">
+                          <string>When Auto POTA is about to send the final signoff and a post-QSO caller is queued, send a packed message like CALL1 RR73; CALL2 &lt;MYCALL&gt; -09.</string>
+                         </property>
+                         <property name="text">
+                          <string>Use RR73 + next report handoff</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QPushButton" name="btn_showAutoQueue">
+                      <property name="toolTip">
+                       <string>Show the floating queue of callers waiting for Auto POTA / Auto CQ / Auto Call handoff.</string>
+                      </property>
+                      <property name="text">
+                       <string>Show Auto Queue</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
                      <widget class="QPushButton" name="btn_showAutoLog">
                       <property name="toolTip">
                        <string>Show the Auto CQ / Auto Call contact log window</string>

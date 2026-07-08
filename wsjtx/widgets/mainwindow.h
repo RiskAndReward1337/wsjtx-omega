@@ -427,6 +427,7 @@ private slots:
   void on_btn_addToIgnore_clicked();
   void on_btn_clearIgnore_clicked();
   void on_btn_showAutoLog_clicked();
+  void on_btn_showAutoQueue_clicked();
   void on_btn_showOmega_toggled(bool b);
   void on_btn_clearAutoIgnore_clicked();
   void ignoreAutoStation(QString const& callsign);
@@ -899,6 +900,15 @@ private:
   int     m_maxDistance = 0;
   int     m_maxSignal = -30;
   QString m_priorityCall;
+  struct AutoQueuedCaller {
+    QString call;
+    QString grid;
+    QString report;
+    int freq = 0;
+    bool txFirst = false;
+    QDateTime heardAt;
+  };
+  QQueue<AutoQueuedCaller> m_autoQueuedCallers;
   QString m_tailenderCall;
   QString m_tailenderGrid;
   QString m_tailenderRpt;
@@ -914,6 +924,8 @@ private:
   QString        m_potaLastDate;     // UTC date when m_potaWorkedToday was last cleared
   QDialog*       m_autoLogDlg  = nullptr;  // Auto CQ/Call contact log window
   QTextEdit*     m_autoLogText = nullptr;  // text widget inside the log window
+  QDialog*       m_autoQueueDlg  = nullptr;  // Auto post-QSO caller queue window
+  QTextEdit*     m_autoQueueText = nullptr;  // text widget inside the queue window
   // Auto-ignore: stations that did not respond (key=call, value=expiry; null QDateTime = indefinite)
   QMap<QString, QDateTime> m_autoIgnored;
   QString        m_autoCallTarget;   // callsign we are currently calling in Auto Call / Hunt
@@ -1102,6 +1114,11 @@ private:
   // Auto CQ / Auto Call / Filtering (ported from WSJT-Z)
   bool directedNeededGridDecode(DecodedText const& dt, bool requireActiveGridFilter) const;
   bool callsignFiltered(DecodedText dt);
+  void queueAutoCaller(QString const& call, QString const& grid, QString const& report,
+                       int freq, bool txFirst, QString const& reason);
+  bool workNextQueuedAutoCaller(QString const& reason);
+  bool prepareAutoPotaDualHandoff(QString const& reason);
+  void refreshAutoQueueWindow();
   void ZProcess();
   void resetAutoSwitch();
   bool setFreeFreq();
