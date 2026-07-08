@@ -1689,6 +1689,8 @@ void MainWindow::writeSettings()
   // Auto CQ / Auto Call / Filtering settings
   m_settings->setValue("AutoCallPriority",ui->cb_autoCallPriority->currentIndex());
   m_settings->setValue("autoModeSwitchEnabled", ui->cb_autoModeSwitch->isChecked());
+  m_settings->setValue("directedNewGridHighlight", ui->cb_highlightDirectedNewGrid->isChecked());
+  m_settings->setValue("directedNewGridShowWithFilters", ui->cb_showDirectedNewGridWithFilters->isChecked());
   m_settings->setValue("filter_enabled",  ui->cb_filtering->isChecked());
   m_settings->setValue("filter_callB4",   ui->cb_callB4->isChecked());
   m_settings->setValue("filter_callB4onBand", ui->cb_callB4onBand->isChecked());
@@ -2148,6 +2150,8 @@ void MainWindow::readSettings()
   // Auto CQ / Auto Call / Filtering settings
   ui->cb_autoCallPriority->setCurrentIndex(m_settings->value("AutoCallPriority", 0).toInt());
   ui->cb_autoModeSwitch->setChecked(m_settings->value("autoModeSwitchEnabled", false).toBool());
+  ui->cb_highlightDirectedNewGrid->setChecked(m_settings->value("directedNewGridHighlight", false).toBool());
+  ui->cb_showDirectedNewGridWithFilters->setChecked(m_settings->value("directedNewGridShowWithFilters", false).toBool());
   ui->cb_filtering->setChecked(m_settings->value("filter_enabled", true).toBool());
   ui->cb_callB4->setChecked(m_settings->value("filter_callB4", false).toBool());
   ui->cb_callB4onBand->setChecked(m_settings->value("filter_callB4onBand", false).toBool());
@@ -3440,19 +3444,24 @@ void MainWindow::fastSink(qint64 frames)
         m_points = 0;
 
         if (!ui->cb_filtering->isChecked() || !callsignFiltered(decodedtext)) {
+          bool highlightDirectedGrid = ui->cb_highlightDirectedNewGrid->isChecked()
+              && directedNeededGridDecode(decodedtext, false);
+          bool includeDirectedGrid = ui->cb_showDirectedNewGridWithFilters->isChecked()
+              && directedNeededGridDecode(decodedtext, true);
           ui->decodedTextBrowser->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
             m_logBook, m_currentBandPeriod, m_config.ppfx (),
             ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
             haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
             ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
-            ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
+            ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked(),
+            highlightDirectedGrid, includeDirectedGrid);
           if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
         }
 
         // display "73" messages for us also in the right pane
         if (m_mode=="MSK144" && text.mid(22).contains(m_baseCall + " " + m_hisCall + " 73")) {
             ui->decodedTextBrowser2->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
-              m_logBook, m_currentBand, m_config.ppfx (), false, false, 0.0, false, -99, "", m_muted);
+              m_logBook, m_currentBandPeriod, m_config.ppfx (), false, false, 0.0, false, -99, "", m_muted);
         }
     }
 
@@ -5919,11 +5928,16 @@ void::MainWindow::fast_decode_done()
 //Left (Band activity) window
     DecodedText decodedtext {message.replace (QChar::LineFeed, "")};
     if(!m_bFastDone && (!ui->cb_filtering->isChecked() || !callsignFiltered(decodedtext))) {
+      bool highlightDirectedGrid = ui->cb_highlightDirectedNewGrid->isChecked()
+          && directedNeededGridDecode(decodedtext, false);
+      bool includeDirectedGrid = ui->cb_showDirectedNewGridWithFilters->isChecked()
+          && directedNeededGridDecode(decodedtext, true);
       ui->decodedTextBrowser->displayDecodedText (decodedtext, m_config.my_callsign (), m_mode, m_config.DXCC (),
          m_logBook, m_currentBandPeriod, m_config.ppfx (),
          ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(), false, 0.0, false, -99, "", m_muted,
          ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
-         ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
+         ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked(),
+         highlightDirectedGrid, includeDirectedGrid);
       if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
     }
 
@@ -7170,6 +7184,10 @@ void MainWindow::readFromStdout()                             //readFromStdout
           QString deGrid;
           decodedtext.deCallAndGrid(deCall,deGrid);
           distance = distance_bearing_heading_text (m_config, deGrid);
+          bool highlightDirectedGrid = ui->cb_highlightDirectedNewGrid->isChecked()
+              && directedNeededGridDecode(decodedtext, false);
+          bool includeDirectedGrid = ui->cb_showDirectedNewGridWithFilters->isChecked()
+              && directedNeededGridDecode(decodedtext, true);
 
           // display country names for JT65 and JT9 like for FT8
           if ((m_mode == "JT65" or m_mode == "JT9" or m_mode == "JT4") && m_config.DXCC()) {
@@ -7179,7 +7197,8 @@ void MainWindow::readFromStdout()                             //readFromStdout
                                                         ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
                                                         haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
                                                         ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
-                                                        ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
+                                                        ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked(),
+                                                        highlightDirectedGrid, includeDirectedGrid);
           } else {
             if (ui->actionHide_AP_info->isVisible() && ui->actionHide_AP_info->isChecked()) {
               // Hide FT8 AP information
@@ -7190,14 +7209,16 @@ void MainWindow::readFromStdout()                             //readFromStdout
                                                           ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
                                                           haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
                                                           ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
-                                                          ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
+                                                          ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked(),
+                                                          highlightDirectedGrid, includeDirectedGrid);
             } else {
               ui->decodedTextBrowser->displayDecodedText (decodedtext1, m_config.my_callsign (), m_mode, m_config.DXCC (),
                                                           m_logBook, m_currentBandPeriod, m_config.ppfx (),
                                                           ui->cbCQonly->isVisible() && ui->cbCQonly->isChecked(),
                                                           haveFSpread, fSpread, bDisplayPoints, m_points, distance, m_muted,
                                                           ui->cbCQ73only->isVisible() && ui->cbCQ73only->isChecked(),
-                                                          ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked());
+                                                          ui->cbPotaOnly->isVisible() && ui->cbPotaOnly->isChecked(),
+                                                          highlightDirectedGrid, includeDirectedGrid);
             }
           }
           if(m_position != 0) ui->decodedTextBrowser->horizontalScrollBar()->setValue(m_position);
@@ -7644,7 +7665,7 @@ void MainWindow::readFromStdout()                             //readFromStdout
           }
           if (m_config.alert_Enabled() && ui->actionInclude_averaging->isVisible() && ui->actionInclude_averaging->isChecked()) ui->decodedTextBrowser->new_period (); // ensure alerts are played
           ui->decodedTextBrowser2->displayDecodedText (decodedtext0, m_config.my_callsign (), m_mode, m_config.DXCC (),
-            m_logBook, m_currentBand, m_config.ppfx (), false, false, 0.0, bDisplayPoints, m_points, "", m_muted);
+            m_logBook, m_currentBandPeriod, m_config.ppfx (), false, false, 0.0, bDisplayPoints, m_points, "", m_muted);
         }
         m_QSOText = decodedtext.string ().trimmed ();
       }
@@ -9873,7 +9894,7 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     }
     if (!s2.contains(m_baseCall) or m_mode=="MSK144") {  // Taken care of elsewhere if for_us and slow mode
       ui->decodedTextBrowser2->displayDecodedText (message, m_config.my_callsign (), m_mode, m_config.DXCC (),
-        m_logBook, m_currentBand, m_config.ppfx (), false, false, 0.0, false, -99, "", m_muted);
+        m_logBook, m_currentBandPeriod, m_config.ppfx (), false, false, 0.0, false, -99, "", m_muted);
     }
     m_QSOText = s2;
   }
@@ -11268,6 +11289,12 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
     {
       MessageBox::warning_message (this, tr ("Log file error"),
                                    tr ("Cannot open \"%1\"").arg (m_logBook.path ()));
+    }
+  else
+    {
+      // Existing right-panel lines keep their old block colours; clear stale
+      // "needed" row paint once the worked-before cache has the new QSO.
+      ui->decodedTextBrowser2->clearWorkedBeforeHighlight(call, grid);
     }
 
   m_messageClient->qso_logged (QSO_date_off, call, grid, dial_freq, mode, rpt_sent, rpt_received
@@ -18560,9 +18587,75 @@ bool MainWindow::setFreeFreq()
     return false;
 }
 
+// Return true when a station calling someone else sent a grid we need.
+// With requireActiveGridFilter, only count grids selected by the active filters.
+bool MainWindow::directedNeededGridDecode(DecodedText const& dt, bool requireActiveGridFilter) const
+{
+    if (requireActiveGridFilter && !ui->cb_filtering->isChecked()) return false;
+
+    bool useAnyBandGrid = !requireActiveGridFilter || ui->cb_gridB4->isChecked();
+    bool useCurrentBandGrid = !requireActiveGridFilter || ui->cb_gridB4onBand->isChecked();
+    if (!useAnyBandGrid && !useCurrentBandGrid) return false;
+
+    QString dxCall;
+    QString dxGrid;
+    dt.deCallAndGrid(/*out*/ dxCall, dxGrid);
+    dxCall = clean_auto_call_token(dxCall);
+    if (!plausible_auto_callsign(dxCall) || !dxGrid.contains(grid_regexp)) return false;
+
+    auto normalizedCall = [](QString word) {
+        word = clean_auto_call_token(word);
+        if (word.isEmpty()) return QString {};
+        return Radio::base_callsign(word);
+    };
+
+    QString addressedStation;
+    QString callingStation;
+    auto const& messageWords = dt.messageWords();
+    if (messageWords.size() > 3) {
+        addressedStation = normalizedCall(messageWords.at(2));
+        callingStation = normalizedCall(messageWords.at(3));
+    }
+    if (callingStation.isEmpty()) callingStation = normalizedCall(dxCall);
+
+    if (!plausible_auto_callsign(addressedStation)
+        || !plausible_auto_callsign(callingStation)
+        || addressedStation == callingStation) {
+        return false;
+    }
+
+    QString myBase = Radio::base_callsign(m_config.my_callsign());
+    if (own_auto_call(addressedStation, m_config.my_callsign(), myBase)
+        || own_auto_call(callingStation, m_config.my_callsign(), myBase)) {
+        return false;
+    }
+
+    bool callB4 = false;
+    bool callB4onBand = false;
+    bool countryB4 = false;
+    bool countryB4onBand = false;
+    bool gridB4 = true;
+    bool gridB4onBand = true;
+    bool continentB4 = false;
+    bool continentB4onBand = false;
+    bool CQZoneB4 = false;
+    bool CQZoneB4onBand = false;
+    bool ITUZoneB4 = false;
+    bool ITUZoneB4onBand = false;
+
+    auto const& lookedUp = m_logBook.countries()->lookup(callingStation);
+    m_logBook.match(callingStation, m_mode, dxGrid, lookedUp,
+                    callB4, countryB4, gridB4, continentB4, CQZoneB4, ITUZoneB4);
+    m_logBook.match(callingStation, m_mode, dxGrid, lookedUp,
+                    callB4onBand, countryB4onBand, gridB4onBand,
+                    continentB4onBand, CQZoneB4onBand, ITUZoneB4onBand,
+                    m_currentBand);
+
+    return (useAnyBandGrid && !gridB4) || (useCurrentBandGrid && !gridB4onBand);
+}
+
 // Evaluate whether a decoded callsign should be filtered (hidden / not called).
-// Returns true  → hide / skip this station.
-// Returns false → station passes all filters and may be called.
+// Returns true when this station should be skipped.
 bool MainWindow::callsignFiltered(DecodedText dt)
 {
     QString dxCall;

@@ -33,10 +33,13 @@ public:
                           QString const& currentBand=QString {}, bool ppfx=false, bool bCQonly=false,
                           bool haveFSpread = false, float fSpread = 0.0, bool bDisplayPoints=false,
                           int points=-99, QString distance = "", bool alertsMuted=false,
-                          bool bCQ73only=false, bool bPotaOnly=false);
+                          bool bCQ73only=false, bool bPotaOnly=false,
+                          bool highlightDirectedNeededGrid=false,
+                          bool includeDirectedNeededGrid=false);
   void displayTransmittedText(QString text, QString modeTx, qint32 txFreq, bool bFastMode,
                               double TRperiod, bool bSuperfox);
   void displayQSY(QString text);
+  void clearWorkedBeforeHighlight(QString const& call, QString const& grid);
   void displayHoundToBeCalled(QString t, bool bAtTop=false, QColor bg = QColor {}, QColor fg = QColor {});
   void setHighlightedHoundText(QString text);
   void new_period ();

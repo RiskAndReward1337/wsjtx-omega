@@ -536,7 +536,9 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
                                      QString const& currentBand, bool ppfx, bool bCQonly,
                                      bool haveFSpread, float fSpread, bool bDisplayPoints,
                                      int points, QString distance, bool alertsMuted,
-                                     bool bCQ73only, bool bPotaOnly)
+                                     bool bCQ73only, bool bPotaOnly,
+                                     bool highlightDirectedNeededGrid,
+                                     bool includeDirectedNeededGrid)
 {
   m_points=points;
   m_bDisplayPoints=bDisplayPoints;
@@ -552,8 +554,8 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
   bool is_cq_pota = decodedText.messageText().contains(
       QRegularExpression {R"(^CQ\s+POTA(?:\s|$))", QRegularExpression::CaseInsensitiveOption});
   if (bPotaOnly && !is_cq_pota) return;
-  if (bCQ73only && !is_cq_message && !is_73) return;
-  if (bCQonly && !is_cq_message) return;
+  if (bCQ73only && !is_cq_message && !is_73 && !includeDirectedNeededGrid) return;
+  if (bCQonly && !is_cq_message && !includeDirectedNeededGrid) return;
   if (is_cq_message) {
     if (m_config->alert_CQ()) {
       if (!muted) play_CQ = true;
@@ -565,7 +567,7 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
     }
   else
     {
-      if (bCQonly) return;
+      if (bCQonly && !includeDirectedNeededGrid) return;
     }
   auto message = decodedText.string();
   QString dxCall;
@@ -598,7 +600,8 @@ void DisplayText::displayDecodedText(DecodedText const& decodedText, QString con
       message = message.left (ap_pos).trimmed ();
     }
   m_CQPriority="";
-  if (CQcall || (is_73 && m_config->highlight_73()) || (mode == "FT4" && m_config->highlight_73() && m_config->NCCC_Sprint()
+  bool treat_directed_needed_grid = highlightDirectedNeededGrid || includeDirectedNeededGrid;
+  if (CQcall || treat_directed_needed_grid || (is_73 && m_config->highlight_73()) || (mode == "FT4" && m_config->highlight_73() && m_config->NCCC_Sprint()
       && (SpecOp::NA_VHF == m_config->special_op_id()) && decodedText.string().contains(" R ")))
     {
       if (displayDXCCEntity)
@@ -965,6 +968,46 @@ void DisplayText::highlight_callsign (QString const& callsign, QColor const& bg,
         }
     }
   setCurrentCharFormat (old_format);
+}
+
+void DisplayText::clearWorkedBeforeHighlight(QString const& call, QString const& grid)
+{
+  QString const cleanedCall = call.trimmed().toUpper();
+  QString const cleanedGrid = grid.left(4).trimmed().toUpper();
+  if (cleanedCall.isEmpty() && cleanedGrid.isEmpty()) return;
+
+  auto tokenMatch = [](QString const& text, QString const& token) {
+    if (token.isEmpty()) return false;
+    QRegularExpression target {
+        QString {R"((^|[^A-Z0-9/]))"} + QRegularExpression::escape(token) + QString {R"((?=$|[^A-Z0-9/]))"},
+        QRegularExpression::CaseInsensitiveOption};
+    return text.contains(target);
+  };
+
+  QTextCharFormat old_format {currentCharFormat ()};
+  QRegularExpression tx_line {R"(^\d{4,6}\s+Tx\b)"};
+
+  for (QTextBlock block = document()->firstBlock(); block.isValid(); block = block.next())
+    {
+      QString const line = block.text();
+      if (line.contains(tx_line)) continue;
+      if (!tokenMatch(line, cleanedCall) && !tokenMatch(line, cleanedGrid)) continue;
+
+      QTextCursor cursor {block};
+      auto block_format = block.blockFormat();
+      block_format.clearBackground();
+      cursor.setBlockFormat(block_format);
+
+      cursor.movePosition(QTextCursor::StartOfBlock);
+      cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+      auto format = cursor.charFormat();
+      format.setFont(char_font_);
+      format.clearBackground();
+      format.clearForeground();
+      cursor.setCharFormat(format);
+    }
+
+  setCurrentCharFormat(old_format);
 }
 
 void DisplayText::AudioAlerts()

@@ -4134,6 +4134,53 @@ Double-click to reset to the standard 73 message</string>
                      </layout>
                     </item>
                     <item>
+                     <widget class="QGroupBox" name="groupBox_directedGrid">
+                      <property name="toolTip">
+                       <string>Options for stations sending a grid while calling another station.</string>
+                      </property>
+                      <property name="title">
+                       <string>Directed New Grid Decodes</string>
+                      </property>
+                      <layout class="QVBoxLayout" name="verticalLayout_directedGrid">
+                       <property name="spacing">
+                        <number>2</number>
+                       </property>
+                       <property name="leftMargin">
+                        <number>5</number>
+                       </property>
+                       <property name="topMargin">
+                        <number>3</number>
+                       </property>
+                       <property name="rightMargin">
+                        <number>5</number>
+                       </property>
+                       <property name="bottomMargin">
+                        <number>3</number>
+                       </property>
+                       <item>
+                        <widget class="QCheckBox" name="cb_highlightDirectedNewGrid">
+                         <property name="toolTip">
+                          <string>Apply New Grid / New Grid on Band highlighting to stations calling other stations when their grid is needed.</string>
+                         </property>
+                         <property name="text">
+                          <string>Highlight directed needed grids</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <widget class="QCheckBox" name="cb_showDirectedNewGridWithFilters">
+                         <property name="toolTip">
+                          <string>When CQ-only/new-grid filtering is active, also show directed calls if their grid passes the active New Grid or New Grid on Band filter.</string>
+                         </property>
+                         <property name="text">
+                          <string>Show with filtered new-grid CQ</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                    <item>
                      <widget class="QPushButton" name="btn_showAutoLog">
                       <property name="toolTip">
                        <string>Show the Auto CQ / Auto Call contact log window</string>

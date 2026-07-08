@@ -1100,6 +1100,7 @@ private:
   QTextStream    m_autoDebugStream;
 
   // Auto CQ / Auto Call / Filtering (ported from WSJT-Z)
+  bool directedNeededGridDecode(DecodedText const& dt, bool requireActiveGridFilter) const;
   bool callsignFiltered(DecodedText dt);
   void ZProcess();
   void resetAutoSwitch();
