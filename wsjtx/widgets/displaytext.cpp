@@ -782,7 +782,7 @@ void DisplayText::displayTransmittedText(QString text, QString modeTx, qint32 tx
     QColor fg;
     highlight_types types {Highlight::Tx};
     set_colours (m_config, &bg, &fg, types);
-    if(bSuperfox and t.contains(";")) {
+    if(bSuperfox and modeTx.mid(0,6)=="FT8fox" and t.contains(";")) {
       int i0=t.indexOf(";");
       int i1=t.indexOf("<");
       int i2=t.indexOf(">");

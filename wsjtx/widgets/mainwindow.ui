@@ -4183,10 +4183,10 @@ Double-click to reset to the standard 73 message</string>
                     <item>
                      <widget class="QGroupBox" name="groupBox_postQSOCallers">
                       <property name="toolTip">
-                       <string>Options for callers heard immediately after an automated QSO finishes.</string>
+                       <string>Options for callers queued while automated modes are running.</string>
                       </property>
                       <property name="title">
-                       <string>Post-QSO Callers</string>
+                       <string>Auto Caller Queue</string>
                       </property>
                       <layout class="QVBoxLayout" name="verticalLayout_postQSOCallers">
                        <property name="spacing">
@@ -4207,10 +4207,10 @@ Double-click to reset to the standard 73 message</string>
                        <item>
                         <widget class="QCheckBox" name="cb_workPostQSOCallers">
                          <property name="toolTip">
-                          <string>Queue stations calling us right after an automated QSO and work them when free. Auto Call/Hunt CQ priority still wins first.</string>
+                          <string>Queue stations calling us and work them when free. Auto Call/Hunt CQ priority still wins first.</string>
                          </property>
                          <property name="text">
-                          <string>Work callers after QSO</string>
+                          <string>Work queued callers automatically</string>
                          </property>
                         </widget>
                        </item>

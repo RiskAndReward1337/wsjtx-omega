@@ -909,6 +909,20 @@ private:
     QDateTime heardAt;
   };
   QQueue<AutoQueuedCaller> m_autoQueuedCallers;
+  bool    m_autoDualLogPending = false;
+  QString m_autoDualCompletedCall;
+  QString m_autoDualCompletedGrid;
+  QString m_autoDualNextCall;
+  QString m_autoDualNextGrid;
+  QString m_autoDualNextRpt;
+  int     m_autoDualNextFreq = 0;
+  bool    m_autoDualNextTxFirst = false;
+  QString m_autoDualMessage;
+  QString m_autoDualRptSent;
+  QString m_autoDualRptRcvd;
+  QString m_autoDualXSent;
+  QString m_autoDualXRcvd;
+  QDateTime m_autoDualQSOOn;
   QString m_tailenderCall;
   QString m_tailenderGrid;
   QString m_tailenderRpt;
@@ -1114,10 +1128,15 @@ private:
   // Auto CQ / Auto Call / Filtering (ported from WSJT-Z)
   bool directedNeededGridDecode(DecodedText const& dt, bool requireActiveGridFilter) const;
   bool callsignFiltered(DecodedText dt);
+  bool autoCallerQueueEnabled() const;
+  void removeQueuedAutoCallerVariants(QStringList const& variants, QString const& reason);
+  bool autoQueueCallerShouldSkip(QString const& call, QString const& grid, QString const& context);
   void queueAutoCaller(QString const& call, QString const& grid, QString const& report,
                        int freq, bool txFirst, QString const& reason);
   bool workNextQueuedAutoCaller(QString const& reason);
-  bool prepareAutoPotaDualHandoff(QString const& reason);
+  bool prepareAutoPotaDualHandoff(QString const& reason, bool allowStartingTx = false);
+  bool isPreparedAutoPotaDualHandoffTx() const;
+  bool commitAutoPotaDualHandoffTx();
   void refreshAutoQueueWindow();
   void ZProcess();
   void resetAutoSwitch();
