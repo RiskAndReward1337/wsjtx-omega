@@ -1317,9 +1317,6 @@ if (OPENMP_FOUND OR APPLE)
     # MSYS2 GCC 16 emits .tls_common for this file's OpenMP threadprivate
     # COMMON block, but current MinGW binutils rejects that pseudo-op.
     set_source_files_properties (lib/map65_mmdec.f90 PROPERTIES COMPILE_FLAGS "-fno-openmp")
-    # GCC 16 can also emit .tls_common from decoder.f90's timer bookkeeping.
-    # Keep OpenMP enabled for the decoder, but avoid thread-private timer state.
-    set_source_files_properties (lib/decoder.f90 PROPERTIES COMPILE_FLAGS "-DWSJT_NO_TIMER_THREADPRIVATE")
   endif ()
   if (OpenMP_C_FLAGS AND NOT APPLE)
     set_target_properties (wsjt_fort_omp

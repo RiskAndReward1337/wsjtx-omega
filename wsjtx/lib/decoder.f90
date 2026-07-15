@@ -24,7 +24,8 @@ subroutine multimode_decoder(ss,id2,params,nfsample)
   use packjt77, only : lcommonft8b,ihash22var,calls12var,calls22var
 
   include 'jt9com.f90'
-  include 'timer_common.inc'
+  ! decoder only calls timer(); declaring timer_private here makes MinGW GCC 16
+  ! emit .tls_common for unused thread-local timer bookkeeping.
 
   type, extends(jt4_decoder) :: counting_jt4_decoder
      integer :: decoded
