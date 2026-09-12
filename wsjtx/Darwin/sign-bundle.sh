@@ -13,7 +13,9 @@ while IFS= read -r -d '' binary; do
     echo "Non-ARM64 binary in Apple Silicon bundle: ${binary}" >&2
     exit 1
   fi
-  if otool -L "${binary}" | tail -n +2 | grep -E '^[[:space:]]+(/opt/|/usr/local/|/Users/)' ; then
+  dependencies="$(otool -L "${binary}")"
+  if printf '%s\n' "${dependencies}" | tail -n +2 | grep -E '^[[:space:]]+/' \
+      | grep -Ev '^[[:space:]]+(/usr/lib/|/System/Library/)'; then
     echo "Unbundled dependency in ${binary}" >&2
     exit 1
   fi

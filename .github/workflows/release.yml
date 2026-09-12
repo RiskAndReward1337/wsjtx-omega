@@ -78,6 +78,9 @@ jobs:
           bash scripts/run-with-heartbeat.sh 60 \
             cmake --build build-linux --target package --parallel 2
 
+      - name: Run Linux regression tests
+        run: ctest --test-dir build-linux/wsjtx-prefix/src/wsjtx-build --output-on-failure
+
       - name: Collect Linux artifacts
         run: |
           mkdir -p dist/linux
@@ -142,6 +145,9 @@ jobs:
               -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE
           bash scripts/run-with-heartbeat.sh 60 \
             cmake --build build-windows --target package --parallel 2
+
+      - name: Run Windows regression tests
+        run: ctest --test-dir build-windows/wsjtx-prefix/src/wsjtx-build --output-on-failure
 
       - name: Collect Windows artifacts
         run: |
@@ -220,5 +226,6 @@ jobs:
           else
             gh release create "${tag}" "${assets[@]}" \
               --title "WSJTX Omega ${tag}" \
+              --notes "Windows and Linux packages plus an Apple Silicon ARM64 DMG are attached. The macOS build requires macOS 15 or newer and is ad-hoc signed, not notarized; macOS may require approval in Privacy & Security before first launch. See MACOS_BUILD.md for details." \
               --generate-notes
           fi

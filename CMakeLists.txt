@@ -186,6 +186,20 @@ foreach (CACHE_VAR ${CACHE_VARS})
   endif ()
 endforeach ()
 
+# CMake can replace the help text of toolchain/cache entries during project()
+# initialization. Do not rely on the command-line help-text heuristic for the
+# macOS toolchain: the inner build must use the same compiler and architecture.
+if (APPLE)
+  foreach (_toolchain_var
+      CMAKE_BUILD_TYPE CMAKE_C_COMPILER CMAKE_CXX_COMPILER CMAKE_Fortran_COMPILER
+      CMAKE_TOOLCHAIN_FILE CMAKE_OSX_ARCHITECTURES CMAKE_OSX_DEPLOYMENT_TARGET
+      CMAKE_OSX_SYSROOT Boost_ROOT)
+    if (DEFINED ${_toolchain_var} AND NOT "${${_toolchain_var}}" STREQUAL "")
+      list (APPEND CMAKE_ARGS "-D${_toolchain_var}=${${_toolchain_var}}")
+    endif ()
+  endforeach ()
+endif ()
+
 #
 # build and optionally install WSJT-X using the hamlib package built
 # above

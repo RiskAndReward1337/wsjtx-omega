@@ -21,6 +21,9 @@ export CMAKE_PREFIX_PATH="${qt_prefix}:${boost_prefix}:${brew_prefix}${CMAKE_PRE
 export PKG_CONFIG_PATH="${brew_prefix}/lib/pkgconfig${PKG_CONFIG_PATH:+:${PKG_CONFIG_PATH}}"
 export PATH="${qt_prefix}/bin:${brew_prefix}/bin:${PATH}"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
+export FC="${fortran}"
 
 cmake -S "${root}" -B "${build}" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
