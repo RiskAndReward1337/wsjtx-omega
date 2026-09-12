@@ -4181,51 +4181,14 @@ Double-click to reset to the standard 73 message</string>
                      </widget>
                     </item>
                     <item>
-                     <widget class="QGroupBox" name="groupBox_postQSOCallers">
-                      <property name="toolTip">
-                       <string>Options for callers queued while automated modes are running.</string>
-                      </property>
-                      <property name="title">
-                       <string>Auto Caller Queue</string>
-                      </property>
-                      <layout class="QVBoxLayout" name="verticalLayout_postQSOCallers">
-                       <property name="spacing">
-                        <number>2</number>
-                       </property>
-                       <property name="leftMargin">
-                        <number>5</number>
-                       </property>
-                       <property name="topMargin">
-                        <number>3</number>
-                       </property>
-                       <property name="rightMargin">
-                        <number>5</number>
-                       </property>
-                       <property name="bottomMargin">
-                        <number>3</number>
-                       </property>
-                       <item>
-                        <widget class="QCheckBox" name="cb_workPostQSOCallers">
-                         <property name="toolTip">
-                          <string>Queue stations calling us and work them when free. Auto Call/Hunt CQ priority still wins first.</string>
-                         </property>
-                         <property name="text">
-                          <string>Work queued callers automatically</string>
-                         </property>
-                        </widget>
-                       </item>
-                      </layout>
-                     </widget>
-                    </item>
-                    <item>
-                     <widget class="QGroupBox" name="groupBox_autoPotaDualHandoff">
+                     <widget class="QGroupBox" name="groupBox_multiResponse">
                       <property name="toolTip">
                        <string>Use the FT8 DXpedition packed message format to finish one Auto POTA QSO and send the next queued caller a report in the same single-stream transmission.</string>
                       </property>
                       <property name="title">
-                       <string>Auto POTA Dual Handoff</string>
+                       <string>Multi-Response</string>
                       </property>
-                      <layout class="QVBoxLayout" name="verticalLayout_autoPotaDualHandoff">
+                      <layout class="QVBoxLayout" name="verticalLayout_multiResponse">
                        <property name="spacing">
                         <number>2</number>
                        </property>
@@ -4242,26 +4205,49 @@ Double-click to reset to the standard 73 message</string>
                         <number>3</number>
                        </property>
                        <item>
-                        <widget class="QCheckBox" name="cb_autoPotaDualHandoff">
+                        <widget class="QCheckBox" name="cb_multiResponse">
                          <property name="toolTip">
-                          <string>When Auto POTA is about to send the final signoff and a post-QSO caller is queued, send a packed message like CALL1 RR73; CALL2 &lt;MYCALL&gt; -09.</string>
+                          <string>In FT8 Auto POTA, queue callers and send RR73 to one station plus a report to the next in one message: CALL1 RR73; CALL2 &lt;MYCALL&gt; -09.</string>
                          </property>
                          <property name="text">
-                          <string>Use RR73 + next report handoff</string>
+                          <string>Enable Multi-Response</string>
                          </property>
                         </widget>
                        </item>
+                       <item>
+                        <widget class="QLabel" name="label_multiResponseSelection">
+                         <property name="text">
+                          <string>Caller selection:</string>
+                         </property>
+                         <property name="buddy">
+                          <cstring>combo_multiResponseSelection</cstring>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <widget class="QComboBox" name="combo_multiResponseSelection">
+                         <property name="enabled">
+                          <bool>false</bool>
+                         </property>
+                         <property name="toolTip">
+                          <string>Recent callers: only choose stations calling us in the latest receive period, favoring callers heard in multiple periods. Queue order (original): work callers in arrival order, retaining them for up to 90 seconds.</string>
+                         </property>
+                         <property name="currentIndex">
+                          <number>1</number>
+                         </property>
+                         <item>
+                          <property name="text">
+                           <string>Queue order (original)</string>
+                          </property>
+                         </item>
+                         <item>
+                          <property name="text">
+                           <string>Recent callers</string>
+                          </property>
+                         </item>
+                        </widget>
+                       </item>
                       </layout>
-                     </widget>
-                    </item>
-                    <item>
-                     <widget class="QPushButton" name="btn_showAutoQueue">
-                      <property name="toolTip">
-                       <string>Show the floating queue of callers waiting for Auto POTA / Auto CQ / Auto Call handoff.</string>
-                      </property>
-                      <property name="text">
-                       <string>Show Auto Queue</string>
-                      </property>
                      </widget>
                     </item>
                     <item>

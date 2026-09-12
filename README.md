@@ -69,6 +69,50 @@ details for WSJT-X, WSJT-X Improved+, WSJT-Z, and bundled Hamlib are documented
 in [NOTICE.md](NOTICE.md). The root [LICENSE](LICENSE) file contains the GPLv3
 text used by the application.
 
+## Multi-Response
+
+Multi-Response is controlled by one checkbox in the A tab and operates in FT8
+Auto POTA. It sends RR73 to the finishing station and a signal report to the
+next caller in one transmission. The caller-selection dropdown offers:
+
+- **Recent callers** (default): select callers heard in the latest receive
+  period, favoring stations that keep calling across consecutive periods.
+  Duplicate decoder passes count as one transmission. Silent callers leave
+  the queue and can become candidates again if they call again.
+- **Queue order (original)**: retain the original arrival-order selection.
+
+Recency only applies to waiting callers. Once we start working a station, a
+quiet receive period does not replace that partner with a queued caller.
+Normal QSO completion, a configured timeout, or an operator selection ends
+that attempt. The Multi-Response selector does not run in single-response
+Auto POTA, Auto CQ, Auto Call, or Auto Hunt.
+
+Double-clicking a decoded station clears its matching auto-ignore entry so
+the operator can retry it immediately, including while Auto POTA is enabled.
+
+## QSO Limits And Counts
+
+Settings > General > Behavior now has **Maximum QSO time** (default: 3 minutes;
+zero disables it). This independent limit starts with our first transmission
+to a station and includes every transmit and receive period. Reports, message
+changes, and user activity do not restart it. Each station promoted by a
+Multi-Response handoff gets a fresh limit when we send its first report.
+Expiry lets an on-air packet finish, uses the configured auto-ignore duration
+for automated attempts, and returns to the active calling mode without logging
+an unfinished QSO. The remaining QSO limit appears in the status bar.
+
+Both this limit and the existing **Tx watchdog** offer minutes or cycles.
+A Maximum QSO cycle is one TX/RX pair (30 seconds in FT8, 15 seconds in FT4),
+counted from the first TX slot. The secondary Tx watchdog retains its original
+idle-minute behavior or can count transmitted periods of the repeated message;
+in cycle mode it allows the receive period before stopping the next repeat.
+Its existing activity/message-change resets do not reset Maximum QSO time.
+
+The status-bar total includes every contact in the log, with a **Duplicates**
+count alongside it. Each additional record matching the same full callsign,
+band, and mode across the entire log counts as one duplicate. This is display
+only: no records are removed and logging rules are unchanged.
+
 ## Local Builds
 
 Linux:
@@ -109,5 +153,3 @@ The release workflow in `.github/workflows/release.yml` is designed to:
 
 The release job also uploads a source archive of the repository contents so the
 corresponding source remains attached to tagged releases.
-
-

@@ -37,6 +37,8 @@ public:
   bool CQ_zone_worked (int CQ_zone, QString const& mode, QString const& band) const;
   bool ITU_zone_worked (int ITU_zone, QString const& mode, QString const& band) const;
   QString cty_version () const;
+  int qso_count () const;
+  int duplicate_count () const;
 
   Q_SIGNAL void finished_loading (int worked_before_record_count, QString const, QString const& error) const;
 

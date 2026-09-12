@@ -1298,6 +1298,7 @@ if (WSJT_GENERATE_DOCS)
   add_subdirectory (doc)
 endif (WSJT_GENERATE_DOCS)
 if (EXISTS ${CMAKE_SOURCE_DIR}/tests AND IS_DIRECTORY ${CMAKE_SOURCE_DIR}/tests)
+  enable_testing ()
   add_subdirectory (tests)
 endif ()
 

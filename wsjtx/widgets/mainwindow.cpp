@@ -47,6 +47,7 @@
 #include <QButtonGroup>
 #include <QActionGroup>
 #include <QSignalBlocker>
+#include <QScopedValueRollback>
 #include <QSplashScreen>
 #include <QUdpSocket>
 #include <QAbstractItemView>
@@ -818,8 +819,7 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
         {
           m_config.set_CTY_DAT_version(cty_version);
           showStatusMessage (tr ("Scanned ADIF log, %1 worked-before records created. CTY: %2").arg (record_count).arg (cty_version));
-          m_totalQSOCount = record_count;
-          qso_count_label.setText (tr ("QSOs: %1 (Total: %2)").arg (m_sessionQSOCount).arg (m_totalQSOCount));
+          update_qso_count_label();
         }
     });
 
@@ -1176,6 +1176,9 @@ MainWindow::MainWindow(QDir const& temp_directory, bool multiple,
 
   stopWRTimer.setSingleShot(true);
   connect(&stopWRTimer, &QTimer::timeout, this, &MainWindow::stopWRTimeout);
+  m_qsoClock.start();
+  maximumQsoTimer.setInterval(250);
+  connect(&maximumQsoTimer, &QTimer::timeout, this, &MainWindow::checkMaximumQsoTime);
 
   stopWCTimer.setSingleShot(true);
   connect(&stopWCTimer, &QTimer::timeout, this, &MainWindow::stopWCTimeout);
@@ -1552,7 +1555,7 @@ void MainWindow::on_the_minute ()
     }
 
   if (m_config.watchdog () && m_mode!="WSPR" && m_mode!="FST4W") {
-    if (m_idleMinutes < m_config.watchdog ()) ++m_idleMinutes;
+    if (!m_config.watchdog_cycles() && m_idleMinutes < m_config.watchdog ()) ++m_idleMinutes;
     update_watchdog_label ();
   } else {
     tx_watchdog (false);
@@ -1700,8 +1703,10 @@ void MainWindow::writeSettings()
   m_settings->setValue("autoModeSwitchEnabled", ui->cb_autoModeSwitch->isChecked());
   m_settings->setValue("directedNewGridHighlight", ui->cb_highlightDirectedNewGrid->isChecked());
   m_settings->setValue("directedNewGridShowWithFilters", ui->cb_showDirectedNewGridWithFilters->isChecked());
-  m_settings->setValue("autoWorkPostQSOCallers", ui->cb_workPostQSOCallers->isChecked());
-  m_settings->setValue("autoPotaDualHandoff", ui->cb_autoPotaDualHandoff->isChecked());
+  m_settings->remove("autoWorkPostQSOCallers");
+  m_settings->remove("autoPotaDualHandoff");
+  m_settings->setValue("multiResponseEnabled", ui->cb_multiResponse->isChecked());
+  m_settings->setValue("multiResponseSelection", ui->combo_multiResponseSelection->currentIndex());
   m_settings->setValue("filter_enabled",  ui->cb_filtering->isChecked());
   m_settings->setValue("filter_callB4",   ui->cb_callB4->isChecked());
   m_settings->setValue("filter_callB4onBand", ui->cb_callB4onBand->isChecked());
@@ -2163,8 +2168,12 @@ void MainWindow::readSettings()
   ui->cb_autoModeSwitch->setChecked(m_settings->value("autoModeSwitchEnabled", false).toBool());
   ui->cb_highlightDirectedNewGrid->setChecked(m_settings->value("directedNewGridHighlight", false).toBool());
   ui->cb_showDirectedNewGridWithFilters->setChecked(m_settings->value("directedNewGridShowWithFilters", false).toBool());
-  ui->cb_workPostQSOCallers->setChecked(m_settings->value("autoWorkPostQSOCallers", false).toBool());
-  ui->cb_autoPotaDualHandoff->setChecked(m_settings->value("autoPotaDualHandoff", false).toBool());
+  ui->combo_multiResponseSelection->setCurrentIndex(
+      m_settings->value("multiResponseSelection", int(MultiResponse::RecentCallers)).toInt()
+      == MultiResponse::QueueOrder ? MultiResponse::QueueOrder : MultiResponse::RecentCallers);
+  ui->cb_multiResponse->setChecked(m_settings->value("multiResponseEnabled",
+      m_settings->value("autoPotaDualHandoff", false)).toBool());
+  ui->combo_multiResponseSelection->setEnabled(ui->cb_multiResponse->isChecked());
   ui->cb_filtering->setChecked(m_settings->value("filter_enabled", true).toBool());
   ui->cb_callB4->setChecked(m_settings->value("filter_callB4", false).toBool());
   ui->cb_callB4onBand->setChecked(m_settings->value("filter_callB4onBand", false).toBool());
@@ -4026,6 +4035,7 @@ void MainWindow::on_autoButton_clicked (bool checked)
   } else {
       pounce = false;
       m_auto = false;
+      stopMaximumQsoTime();
       m_bCallingCQ = false;
       ui->autoButton->setChecked(false);  // ensure autoButton is unchecked
       filtered = false;
@@ -4437,12 +4447,8 @@ void MainWindow::displayDialFrequency ()
 void MainWindow::stopWRTimeout()
 {
   if (ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()) {
-    autoLog(QString("STOP_WR_TIMEOUT: abandoning stalled AutoCQ/POTA QSO  target='%1'  ntx=%2  QSOProgress=%3")
-            .arg(ui->dxCallEntry->text()).arg(m_ntx).arg(m_QSOProgress));
-    addAutoIgnoredStation(ui->dxCallEntry->text(), "stale AutoCQ/POTA timeout");
-    m_QSOProgress = CALLING;
-    clearDX();
-    auto_tx_mode(true);
+    // Automatic QSOs use the configured overall limit plus the TX watchdog.
+    checkMaximumQsoTime();
     return;
   }
   auto_tx_mode(false);
@@ -4642,7 +4648,8 @@ void MainWindow::createStatusBar()                           //createStatusBar
   qso_count_label.setAlignment (Qt::AlignHCenter);
   qso_count_label.setMinimumSize (QSize {70, 18});
   qso_count_label.setFrameStyle (QFrame::Panel | QFrame::Sunken);
-  qso_count_label.setText ("QSOs: 0");
+  update_qso_count_label();
+  qso_count_label.setToolTip(tr("Duplicates are additional QSOs with the same callsign, band, and mode across the entire ADIF log. Logging is unchanged."));
   statusBar()->addWidget (&qso_count_label);
 
   if (m_config.PWR_and_SWR()) statusBar ()->addPermanentWidget (&band_hopping_label);
@@ -4653,6 +4660,9 @@ void MainWindow::createStatusBar()                           //createStatusBar
   statusBar()->addPermanentWidget(&progressBar);
   progressBar.setMinimumSize (QSize {150, 18});
 
+  statusBar ()->addPermanentWidget (&qso_limit_label);
+  qso_limit_label.setToolTip(tr("Maximum QSO time remaining, including transmit and receive periods."));
+  qso_limit_label.hide();
   statusBar ()->addPermanentWidget (&watchdog_label);
   update_watchdog_label ();
 }
@@ -8011,6 +8021,7 @@ void MainWindow::guiUpdate()
   double txDuration;
 
   if(m_TRperiod==0) m_TRperiod=60.0;
+  checkMaximumQsoTime();
   txDuration=tx_duration(m_mode,m_TRperiod,m_nsps,m_bFast9);
   if(m_mode=="FT8" and m_specOp==SpecOp::FOX and m_config.superFox()) txDuration=1.0+151*1024.0/12000.0;
   // qDebug () << "DEBUG SF " << m_mode << m_TRperiod << m_nsps << (SpecOp::FOX==m_specOp) << m_config.superFox() << txDuration;
@@ -8131,8 +8142,9 @@ void MainWindow::guiUpdate()
       }
     }
 
-    if (m_config.watchdog() && m_mode!="WSPR" && m_mode!="FST4W"
-        && m_idleMinutes >= m_config.watchdog ()) {
+    if (m_config.watchdog() && !m_config.watchdog_cycles()
+        && m_mode!="WSPR" && m_mode!="FST4W"
+        && m_idleMinutes >= m_config.watchdog()) {
       tx_watchdog (true);       // disable transmit
     }
 
@@ -8195,6 +8207,14 @@ void MainWindow::guiUpdate()
     if(m_ntx == 4) txMsg=ui->tx4->text();
     if(m_ntx == 5) txMsg=ui->tx5->currentText();
     if(m_ntx == 6) txMsg=ui->tx6->text();
+    // Let the receive period and any newly selected reply complete before
+    // deciding whether this would be another repetition of the same message.
+    if (m_config.watchdog_cycles() && m_config.watchdog() > 0
+        && m_mode != "WSPR" && m_mode != "FST4W" && !m_tune
+        && m_bTxTime && g_iptt == 0 && m_idleTxCycles >= m_config.watchdog()
+        && txMsg.simplified().toUpper() == m_msgSent0.simplified().toUpper()) {
+      tx_watchdog(true);
+    }
     int msgLength=txMsg.trimmed().length();
     if(msgLength==0 and !m_tune) on_stopTxButton_clicked();
 
@@ -8300,6 +8320,7 @@ void MainWindow::guiUpdate()
 
       if (g_iptt == 1 && m_iptt0 == 0 && !m_tune) {
         prepareAutoPotaDualHandoff("encode-TX", true);
+        if (m_ntx >= 1 && m_ntx <= 5) beginMaximumQsoTime(ui->dxCallEntry->text());
       }
 
       if(m_ntx == 1) ba=ui->tx1->text().toLocal8Bit();
@@ -8636,6 +8657,10 @@ void MainWindow::guiUpdate()
        && current_message != m_msgSent0) {
       tx_watchdog (false);  // in case we are auto sequencing
       m_msgSent0 = current_message;
+    }
+    if (!m_tune && m_config.watchdog_cycles()) {
+      ++m_idleTxCycles;
+      update_watchdog_label();
     }
 
     if (m_mode != "FST4W" && m_mode != "WSPR" && m_mode!="Echo")
@@ -9354,7 +9379,9 @@ void MainWindow::doubleClickOnCall(Qt::KeyboardModifiers modifiers)
     m_muted = true;  // Don't play alert sounds again
     m_bDoubleClicked = true;
     m_hisCall0 = m_hisCall;
+    QScopedValueRollback<bool> manualSelection(m_manualDecodeSelection, true);
     processMessage (message, modifiers);
+    m_bDoubleClicked = false;
     // pressing ALT while double-clicking on a call only adds the callsign to DX Call Box
     if(SpecOp::FOX!=m_specOp && modifiers==Qt::AltModifier) {
         m_bDoubleClicked = false;
@@ -9430,10 +9457,13 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   } else {
     nmod = fmod(double(message.timeInSeconds()),2.0*m_TRperiod);
   }
-  m_txFirst=(nmod!=0);
-  if(SpecOp::HOUND == m_specOp) m_txFirst=false;          //Hound must not transmit first
-  if(SpecOp::FOX == m_specOp) m_txFirst=true;             //Fox must always transmit first
-  ui->txFirstCheckBox->setChecked(m_txFirst);
+  bool const decodedTxFirst = (nmod != 0);
+  if (!recentAutoCallersEnabled() || m_manualDecodeSelection) {
+    m_txFirst = decodedTxFirst;
+    if(SpecOp::HOUND == m_specOp) m_txFirst=false;          //Hound must not transmit first
+    if(SpecOp::FOX == m_specOp) m_txFirst=true;             //Fox must always transmit first
+    ui->txFirstCheckBox->setChecked(m_txFirst);
+  }
 
   auto const& message_words = message.messageWords ();
   if (message_words.size () < 3) return;
@@ -9493,8 +9523,9 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     }
     return false;
   };
-  if (auto_mode_active
+  if (auto_mode_active && !m_manualDecodeSelection
       && isAutoIgnoredDecode(hiscall)) {
+    m_bDoubleClicked = false;
     return;
   }
 
@@ -9516,10 +9547,49 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
     return;
   }
 
-  // Auto CQ / Auto POTA: once we have picked a station to work, do not let a
-  // different caller replace that target mid-handshake.  Queue them as the next
-  // tail-ender instead.
-  if (auto_cq_pota_only && m_bDoubleClicked) {
+  // An operator retry must also accept subsequent automatic replies from them.
+  if (m_manualDecodeSelection && plausible_auto_callsign(hiscall)) {
+    QStringList const variants = auto_call_variants(hiscall);
+    bool removed = false;
+    for (auto it = m_autoIgnored.begin(); it != m_autoIgnored.end();) {
+      if (auto_call_variants_overlap(variants, it.key())) {
+        it = m_autoIgnored.erase(it);
+        removed = true;
+      } else {
+        ++it;
+      }
+    }
+    if (removed) {
+      refreshAutoIgnoredList();
+      autoLog(QString("MANUAL_OVERRIDE: cleared auto-ignore for '%1'").arg(hiscall));
+    }
+    cancelPreparedAutoPotaDualHandoff();
+    removeQueuedAutoCallerVariants(variants, "manual selection");
+  }
+
+  if (recentAutoCallersEnabled() && !m_manualDecodeSelection
+      && ui->dxCallEntry->text().trimmed().isEmpty() && !is_73) {
+    if (message_words.contains(m_baseCall) || message_words.contains(m_config.my_callsign())) {
+      queueAutoCaller(hiscall, hisgrid, message.report(), frequency, decodedTxFirst,
+                      message.timeInSeconds(), "Multi-Response caller selection");
+    }
+    m_bDoubleClicked = false;
+    return;
+  }
+
+  bool const targetSelection = autoCallerQueueEnabled() ? m_manualDecodeSelection : m_bDoubleClicked;
+  if (autoCallerQueueEnabled()
+      && MultiResponse::keepActiveCaller(m_manualDecodeSelection,
+          !ui->dxCallEntry->text().trimmed().isEmpty() && m_QSOProgress > CALLING,
+          auto_call_variants_overlap(auto_call_variants(hiscall), ui->dxCallEntry->text()))) {
+    if (!is_73 && (message_words.contains(m_baseCall) || message_words.contains(m_config.my_callsign()))) {
+      queueAutoCaller(hiscall, hisgrid, message.report(), frequency, decodedTxFirst,
+                      message.timeInSeconds(), "waiting while active QSO progresses");
+    }
+    m_bDoubleClicked = false;
+    return;
+  }
+  if (auto_cq_pota_only && targetSelection) {
     QString currentTarget = ui->dxCallEntry->text().trimmed();
     bool switchingTarget = !currentTarget.isEmpty()
                            && plausible_auto_callsign(hiscall)
@@ -9584,12 +9654,10 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
                                 && currentTarget != m_lastCall
                                 && (m_bCallingCQ || m_QSOProgress > CALLING
                                     || m_transmitting || g_iptt == 1 || m_btxok);
-    if (!m_bDoubleClicked && lockedToOtherStation && messageForMe && !is_73) {
+    if (!targetSelection && lockedToOtherStation && messageForMe && !is_73) {
       if (autoCallerQueueEnabled()) {
-        int nmod = fmod(double(message.timeInSeconds()), 2.0 * m_TRperiod);
-        bool decodedTxFirst = (nmod != 0);
         queueAutoCaller(hiscall, hisgrid, message.report(), message.frequencyOffset(), decodedTxFirst,
-                        "active AutoCQ/POTA caller");
+                        message.timeInSeconds(), "active AutoCQ/POTA caller");
       } else if (m_tailenderCall.isEmpty() || m_tailenderCall == currentTarget) {
         m_tailenderCall = hiscall;
         m_tailenderFreq = message.frequencyOffset();
@@ -9599,8 +9667,14 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
         autoLog(QString("TAILENDER: preserving active target '%1', queued '%2' for later")
                 .arg(currentTarget).arg(hiscall));
       }
+      m_bDoubleClicked = false;
       return;
     }
+  }
+
+  if (recentAutoCallersEnabled() && !m_manualDecodeSelection) {
+    m_txFirst = decodedTxFirst;
+    ui->txFirstCheckBox->setChecked(m_txFirst);
   }
 
   if ((message.isJT9 () and m_mode != "JT9" and m_mode != "JT4") or
@@ -10074,14 +10148,6 @@ void MainWindow::processMessage (DecodedText const& message, Qt::KeyboardModifie
   if (!m_nTx73 and !m_bTUmsg and !freeze_genStdMsgs) {
     genStdMsgs (QString::number (ui->rptSpinBox->value ()));
   }
-  if (auto_cq_pota_active
-      && m_QSOProgress >= REPORT
-      && !ui->dxCallEntry->text().trimmed().isEmpty()
-      && !stopWRTimer.isActive()) {
-    stopWRTimer.start(int(8000.0*m_TRperiod));
-    autoLog(QString("STOP_WR_TIMEOUT: armed for AutoCQ/POTA  target='%1'  ntx=%2  QSOProgress=%3")
-            .arg(ui->dxCallEntry->text()).arg(m_ntx).arg(m_QSOProgress));
-  }
   if(m_transmitting) m_restart=true;
   if (auto_seq && !m_bDoubleClicked && m_mode!="FT4" && m_mode!="FT2") {
     return;
@@ -10473,6 +10539,7 @@ void MainWindow::TxAgain()
 
 void MainWindow::clearDX ()
 {
+  stopMaximumQsoTime();
   set_dateTimeQSO (-1);
   if (m_QSOProgress != CALLING) {
     autoLog(QString("clearDX: QSOProgress=%1 != CALLING, calling auto_tx_mode(false)").arg(m_QSOProgress));
@@ -11136,6 +11203,10 @@ void MainWindow::on_dxCallEntry_textChanged (QString const& call)
     return;
   }
   set_dateTimeQSO (-1);  // reset the QSO start time when DXCall changes
+  if (m_qsoDeadline.active()
+      && !auto_call_variants_overlap(auto_call_variants(call), m_maxQsoTarget)) {
+    stopMaximumQsoTime();
+  }
   m_hisCall = call;
   if(m_QSYMessageCreatorWidget) m_QSYMessageCreatorWidget->getDxBase(QString(Radio::base_callsign(call)));
   if (!blocked) ui->dxGridEntry->clear();  // conditional because not always useful with highlightDXCall/DXGrid feature
@@ -11426,6 +11497,7 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
                             , QString const& freqRx, QByteArray const& ADIF)
 {
   QString date = QSO_date_on.toString("yyyyMMdd");
+  finishMaximumQsoTime(call);
   m_lastloggedcall=call; //ft8md
   if (!m_logBook.add (call, grid, m_config.bands()->find(dial_freq), mode, ADIF))
     {
@@ -11504,8 +11576,7 @@ void MainWindow::acceptQSO (QDateTime const& QSO_date_off, QString const& call, 
 
   // Update session and total QSO counters in the status bar.
   ++m_sessionQSOCount;
-  ++m_totalQSOCount;
-  qso_count_label.setText (tr ("QSOs: %1 (Total: %2)").arg (m_sessionQSOCount).arg (m_totalQSOCount));
+  update_qso_count_label();
 
   // Auto modes: after each completed QSO, abandon the just-worked station and
   // immediately resume the active auto mode for the next cycle.
@@ -13261,6 +13332,7 @@ void MainWindow::stopTuneATU()
 
 void MainWindow::on_stopTxButton_clicked()                    // Stop Tx
 {
+  stopMaximumQsoTime();
   ui->pbBandHopping->setChecked(false); // disable band hopping
   if (m_tune) stop_tuning ();
   if (m_auto and !m_tuneup) auto_tx_mode (false);
@@ -15008,6 +15080,98 @@ void MainWindow::remove_child_from_event_filter (QObject * target)
     }
 }
 
+void MainWindow::update_qso_count_label()
+{
+  m_totalQSOCount = m_logBook.qso_count();
+  qso_count_label.setText(tr(" QSOs: %1 (Total: %2, Duplicates: %3) ")
+      .arg(m_sessionQSOCount).arg(m_totalQSOCount).arg(m_logBook.duplicate_count()));
+}
+
+void MainWindow::beginMaximumQsoTime(QString const& call)
+{
+  QString const target = clean_auto_call_token(call);
+  if (!plausible_auto_callsign(target) || m_tune || m_specOp == SpecOp::FOX
+      || m_mode == "WSPR" || m_mode == "FST4W" || m_mode == "Echo") return;
+  QString const identity = Radio::base_callsign(target) + "|" + m_mode + "|"
+      + m_config.bands()->find(m_freqNominal);
+  qint64 const periodMs = qMax(qint64(1), qRound64(m_TRperiod * 1000));
+  if (m_qsoDeadline.begin(identity, m_qsoClock.elapsed(), periodMs,
+                         QDateTime::currentMSecsSinceEpoch() % periodMs)) {
+    m_maxQsoTarget = target;
+    autoLog(QString("MAX_QSO: started target='%1' limit=%2 units=%3")
+        .arg(target).arg(m_config.maximum_qso_time())
+        .arg(m_config.maximum_qso_cycles() ? "cycles" : "minutes"));
+  }
+  maximumQsoTimer.start();
+}
+
+void MainWindow::finishMaximumQsoTime(QString const& call)
+{
+  if (!m_qsoDeadline.active()
+      || !auto_call_variants_overlap(auto_call_variants(call), m_maxQsoTarget)) return;
+  autoLog(QString("MAX_QSO: completed target='%1' elapsedSeconds=%2")
+      .arg(m_maxQsoTarget).arg(m_qsoDeadline.elapsed(m_qsoClock.elapsed()) / 1000));
+  stopMaximumQsoTime();
+}
+
+void MainWindow::stopMaximumQsoTime()
+{
+  maximumQsoTimer.stop();
+  m_qsoDeadline.clear();
+  m_maxQsoTarget.clear();
+  qso_limit_label.hide();
+}
+
+void MainWindow::checkMaximumQsoTime()
+{
+  if (!m_qsoDeadline.active()) return;
+  QString const currentIdentity = Radio::base_callsign(clean_auto_call_token(ui->dxCallEntry->text()))
+      + "|" + m_mode + "|" + m_config.bands()->find(m_freqNominal);
+  if (currentIdentity != m_qsoDeadline.identity()) {
+    stopMaximumQsoTime();
+    return;
+  }
+  int const limit = m_config.maximum_qso_time();
+  if (limit <= 0) {
+    qso_limit_label.hide();
+    return;
+  }
+  auto const unit = m_config.maximum_qso_cycles() ? QsoDeadline::Cycles : QsoDeadline::Minutes;
+  qint64 const now = m_qsoClock.elapsed();
+  qint64 const remaining = qMax(qint64(0), m_qsoDeadline.limitMs(limit, unit)
+      - m_qsoDeadline.elapsed(now, unit));
+  qso_limit_label.setText(unit == QsoDeadline::Cycles
+      ? tr(" QSO:%1 cycles ").arg((remaining + m_qsoDeadline.cycleMs() - 1) / m_qsoDeadline.cycleMs())
+      : tr(" QSO:%1:%2 ").arg(remaining / 60000).arg((remaining / 1000) % 60, 2, 10, QChar('0')));
+  qso_limit_label.setToolTip(tr("Maximum QSO time for %1; includes transmit and receive time.").arg(m_maxQsoTarget));
+  qso_limit_label.setStyleSheet(remaining <= m_qsoDeadline.cycleMs()
+      ? "QLabel{color: #000000; background-color: #ffff00}" : "");
+  qso_limit_label.show();
+  if (!m_qsoDeadline.expired(now, limit, unit)) return;
+  // Never truncate an on-air packet, including a combined RR73/report handoff.
+  if (g_iptt == 1 || m_transmitting) return;
+
+  QString const target = m_maxQsoTarget;
+  autoLog(QString("MAX_QSO: expired target='%1' elapsedSeconds=%2 limit=%3 units=%4")
+      .arg(target).arg(m_qsoDeadline.elapsed(now) / 1000).arg(limit)
+      .arg(unit == QsoDeadline::Cycles ? "cycles" : "minutes"));
+  stopMaximumQsoTime();
+  cancelPreparedAutoPotaDualHandoff();
+  stopWRTimer.stop();
+  logQSOTimer.stop();
+  bool const automated = ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()
+      || ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked();
+  if (automated) addAutoIgnoredStation(target, "Maximum QSO time expired");
+  removeQueuedAutoCallerVariants(auto_call_variants(target), "Maximum QSO time expired");
+  m_bTxTime = false;
+  m_btxok = false;
+  auto_tx_mode(false);
+  clearDX();
+  tx_watchdog(false);
+  if (ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()) auto_tx_mode(true);
+  // Auto Call/Hunt pick their next filtered station with Enable TX off.
+}
+
 void MainWindow::tx_watchdog (bool triggered)
 {
   auto prior = m_tx_watchdog;
@@ -15020,7 +15184,7 @@ void MainWindow::tx_watchdog (bool triggered)
       // Highlight watchdog label red when watchdog stops TXing, and keep the value
       if (m_config.watchdog () && m_mode!="WSPR" && m_mode!="FST4W") {
         watchdog_label.setStyleSheet ("QLabel{color: #ffffff; background-color: #ff0000}");
-        watchdog_label.setText (tr (" WD:0m "));
+        watchdog_label.setText (m_config.watchdog_cycles() ? tr(" WD:0 cycles ") : tr(" WD:0m "));
       }
       tx_status_label.setStyleSheet ("QLabel{color: #ffffff; background-color: #ff0000}");
       tx_status_label.setText (tr (" Runaway Tx watchdog "));
@@ -15033,7 +15197,8 @@ void MainWindow::tx_watchdog (bool triggered)
           || ui->cbAutoCall->isChecked () || ui->cbAutoHunt->isChecked ()) {
         QString stalledTarget = ui->dxCallEntry->text().trimmed();
         if (stalledTarget.isEmpty ()) stalledTarget = m_autoCallTarget;
-        autoLog(QString("WATCHDOG: fired  target='%1'  idleMin=%2").arg(stalledTarget).arg(m_idleMinutes));
+        autoLog(QString("WATCHDOG: fired  target='%1'  idleMin=%2  txCycles=%3")
+                .arg(stalledTarget).arg(m_idleMinutes).arg(m_idleTxCycles));
         // Auto Call / Auto Hunt: record non-responding station so we don't call again
         if ((ui->cbAutoCQ->isChecked () || ui->cbAutoPOTA->isChecked ())
                 && !stalledTarget.isEmpty ()) {
@@ -15072,6 +15237,7 @@ void MainWindow::tx_watchdog (bool triggered)
   else
     {
       m_idleMinutes = 0;
+      m_idleTxCycles = 0;
       update_watchdog_label ();
     }
   if (prior != triggered) statusUpdate ();
@@ -15079,15 +15245,20 @@ void MainWindow::tx_watchdog (bool triggered)
 
 void MainWindow::update_watchdog_label ()
 {
-  if (!m_auto) m_idleMinutes = 0;   // No countdown unless Enable Tx is active (important for Wait & Call)
+  if (!m_auto) {
+    m_idleMinutes = 0;
+    m_idleTxCycles = 0;
+  }
   if (m_config.watchdog () && m_mode!="WSPR" && m_mode!="FST4W")
     {
-      watchdog_label.setText (tr (" WD:%1m ").arg (m_config.watchdog () - m_idleMinutes));
+      int const remaining = qMax(0, m_config.watchdog()
+          - (m_config.watchdog_cycles() ? m_idleTxCycles : m_idleMinutes));
+      watchdog_label.setText ((m_config.watchdog_cycles() ? tr(" WD:%1 cycles ") : tr(" WD:%1m ")).arg(remaining));
       watchdog_label.setVisible (true);
       // Highlight watchdog label yellow when there is less than one minute left
-      if ((m_config.watchdog() - m_idleMinutes == 1) && (m_auto or m_tune))
+      if (remaining <= 1 && (m_auto or m_tune))
         watchdog_label.setStyleSheet ("QLabel{color: #000000; background-color: #ffff00}");
-      if (m_config.watchdog() - m_idleMinutes > 1) watchdog_label.setStyleSheet ("");
+      else watchdog_label.setStyleSheet ("");
     }
   else
     {
@@ -18558,7 +18729,6 @@ void MainWindow::on_cbAutoCQ_toggled(bool b)
         ui->cbAutoPOTA->setEnabled(true);
     }
     auto_tx_mode(b);
-    refreshAutoQueueWindow();
 }
 
 void MainWindow::on_cbAutoCall_toggled(bool b)
@@ -18588,7 +18758,6 @@ void MainWindow::on_cbAutoCall_toggled(bool b)
     // When b=true, ZProcess will enable TX once it finds the first priority call.
     // When b=false, kill TX so the operator is back in manual control.
     if (!b) auto_tx_mode(false);
-    refreshAutoQueueWindow();
 }
 
 void MainWindow::on_cb_filtering_toggled(bool b)
@@ -18605,7 +18774,6 @@ void MainWindow::on_cb_autoModeSwitch_toggled(bool b)
         resetAutoSwitch();
         ui->cbHoldTxFreq->setChecked(true);
     }
-    refreshAutoQueueWindow();
 }
 
 void MainWindow::on_btn_addToIgnore_clicked()
@@ -18627,53 +18795,6 @@ void MainWindow::autoLog(QString const& msg)
     m_autoDebugStream.flush();
 }
 
-void MainWindow::refreshAutoQueueWindow()
-{
-    if (!m_autoQueueText) return;
-
-    auto col = [](const QString& s, int w) { return s.left(w).leftJustified(w); };
-    QDateTime const now = QDateTime::currentDateTimeUtc();
-    QStringList lines;
-    QStringList modes;
-    if (ui->cbAutoCQ->isChecked()) modes << "Auto CQ";
-    if (ui->cbAutoPOTA->isChecked()) modes << "Auto POTA";
-    if (ui->cbAutoCall->isChecked()) modes << "Auto Call";
-    if (ui->cbAutoHunt->isChecked()) modes << "Auto Hunt";
-
-    lines << "Auto caller queue";
-    lines << QString("Depth: %1    Caller queue: %2    Dual handoff: %3")
-        .arg(m_autoQueuedCallers.size())
-        .arg(autoCallerQueueEnabled() ? "ON" : "OFF")
-        .arg(ui->cb_autoPotaDualHandoff->isChecked() ? "ON" : "OFF");
-    lines << QString("Active modes: %1").arg(modes.isEmpty() ? "none" : modes.join(", "));
-    lines << QString("Active target: %1    Priority CQ first: %2")
-        .arg(ui->dxCallEntry->text().trimmed().isEmpty() ? "-" : ui->dxCallEntry->text().trimmed())
-        .arg(m_priorityCall.trimmed().isEmpty() ? "-" : m_priorityCall.trimmed());
-    lines << "";
-    lines << col("#", 3) + " " + col("Call", 12) + " " + col("Rpt", 5) + " " +
-        col("Grid", 6) + " " + col("Freq", 6) + " " + col("Tx1st", 6) + " " +
-        col("Age", 6);
-    lines << QString(52, '-');
-
-    if (m_autoQueuedCallers.isEmpty()) {
-        lines << "(empty)";
-    } else {
-        for (int i = 0; i < m_autoQueuedCallers.size(); ++i) {
-            AutoQueuedCaller const queued = m_autoQueuedCallers.at(i);
-            qint64 age = queued.heardAt.isValid() ? queued.heardAt.secsTo(now) : 0;
-            if (age < 0) age = 0;
-            lines << col(QString::number(i + 1), 3) + " " +
-                col(queued.call, 12) + " " +
-                col(queued.report, 5) + " " +
-                col(queued.grid, 6) + " " +
-                col(QString::number(queued.freq), 6) + " " +
-                col(queued.txFirst ? "yes" : "no", 6) + " " +
-                col(QString("%1s").arg(age), 6);
-        }
-    }
-
-    m_autoQueueText->setPlainText(lines.join("\n"));
-}
 
 void MainWindow::resetAutoSwitch()
 {
@@ -18688,6 +18809,8 @@ void MainWindow::resetAutoSwitch()
     m_autoDualNextFreq = 0;
     m_autoDualNextTxFirst = false;
     m_autoDualMessage = QString();
+    m_autoDualSignoffMessage.clear();
+    m_autoDualSignoffTx = 4;
     m_autoDualRptSent = QString();
     m_autoDualRptRcvd = QString();
     m_autoDualXSent = QString();
@@ -18698,25 +18821,73 @@ void MainWindow::resetAutoSwitch()
     m_tailenderRpt = QString();
     m_tailenderFreq = 0;
     m_tailenderTxFirst = false;
-    refreshAutoQueueWindow();
 }
 
 bool MainWindow::autoCallerQueueEnabled() const
 {
-    return ui->cb_workPostQSOCallers->isChecked()
-        || (ui->cbAutoPOTA->isChecked() && ui->cb_autoPotaDualHandoff->isChecked());
+    return MultiResponse::enabled(ui->cb_multiResponse->isChecked(), m_mode,
+        ui->cbAutoPOTA->isChecked(), ui->cbAutoCQ->isChecked(),
+        ui->cbAutoCall->isChecked(), ui->cbAutoHunt->isChecked());
+}
+
+bool MainWindow::recentAutoCallersEnabled() const
+{
+    return autoCallerQueueEnabled()
+        && ui->combo_multiResponseSelection->currentIndex() == MultiResponse::RecentCallers;
+}
+
+int MainWindow::nextAutoCallerIndex()
+{
+    QDateTime const now = QDateTime::currentDateTimeUtc();
+    qint64 const periodMs = qRound64(m_TRperiod * 1000);
+    bool const txFirst = ui->txFirstCheckBox->isChecked();
+    // Only called at the TX decision point for Recent callers, after RX decodes.
+    if (recentAutoCallersEnabled()) {
+        auto const discarded = MultiResponse::discardStaleCallers(m_autoQueuedCallers, now, periodMs, txFirst);
+        for (auto const& caller : discarded) {
+            autoLog(QString("AUTO_QUEUE: dropped %1 (not calling us in latest receive period)").arg(caller.call));
+        }
+    }
+    return MultiResponse::nextCaller(m_autoQueuedCallers,
+        recentAutoCallersEnabled() ? MultiResponse::RecentCallers : MultiResponse::QueueOrder,
+        now, periodMs, txFirst);
+}
+
+void MainWindow::cancelPreparedAutoPotaDualHandoff()
+{
+    if (!m_autoDualLogPending) return;
+    // A transmission already on the air must finish with its original message.
+    if (m_transmitting || (g_iptt == 1 && m_iptt0 != 0)) return;
+    QString const prepared = m_autoDualMessage;
+    m_autoDualLogPending = false;
+    m_autoDualMessage.clear();
+    if (ui->tx4->text().trimmed() == prepared) {
+        msgtype(m_autoDualSignoffMessage, ui->tx4);
+        if (m_ntx == 4) setTxMsg(m_autoDualSignoffTx);
+    }
+}
+
+void MainWindow::on_cb_multiResponse_toggled(bool enabled)
+{
+    ui->combo_multiResponseSelection->setEnabled(enabled);
+    if (!enabled) {
+        cancelPreparedAutoPotaDualHandoff();
+        m_autoQueuedCallers.clear();
+    }
+}
+
+void MainWindow::on_combo_multiResponseSelection_currentIndexChanged(int)
+{
+    cancelPreparedAutoPotaDualHandoff();
 }
 
 void MainWindow::removeQueuedAutoCallerVariants(QStringList const& variants, QString const& reason)
 {
-    bool removedAny = false;
     for (int i = m_autoQueuedCallers.size() - 1; i >= 0; --i) {
         if (!auto_call_variants_overlap(variants, m_autoQueuedCallers.at(i).call)) continue;
         auto removed = m_autoQueuedCallers.takeAt(i);
         autoLog(QString("AUTO_QUEUE: removed %1  reason=%2").arg(removed.call, reason));
-        removedAny = true;
     }
-    if (removedAny) refreshAutoQueueWindow();
 }
 
 bool MainWindow::autoQueueCallerShouldSkip(QString const& call, QString const& grid, QString const& context)
@@ -18862,8 +19033,9 @@ bool MainWindow::autoQueueCallerShouldSkip(QString const& call, QString const& g
 }
 
 void MainWindow::queueAutoCaller(QString const& call, QString const& grid, QString const& report,
-                                 int freq, bool txFirst, QString const& reason)
+                                 int freq, bool txFirst, int decodeSeconds, QString const& reason)
 {
+    if (!autoCallerQueueEnabled()) return;
     QString queuedCall = clean_auto_call_token(call);
     if (!plausible_auto_callsign(queuedCall)) return;
 
@@ -18877,12 +19049,19 @@ void MainWindow::queueAutoCaller(QString const& call, QString const& grid, QStri
     queued.freq = freq;
     queued.txFirst = txFirst;
     queued.heardAt = QDateTime::currentDateTimeUtc();
+    qint64 const period = MultiResponse::decodePeriod(decodeSeconds, queued.heardAt, qRound64(m_TRperiod * 1000));
+    queued.heard(period);
     for (int i = 0; i < m_autoQueuedCallers.size(); ++i) {
         if (auto_call_variants_overlap(variants, m_autoQueuedCallers.at(i).call)) {
+            auto const& previous = m_autoQueuedCallers.at(i);
+            if (period < previous.lastPeriod) return;
+            queued.lastPeriod = previous.lastPeriod;
+            queued.heardPeriods = previous.heardPeriods;
+            queued.heard(period);
+            if (queued.grid.isEmpty()) queued.grid = previous.grid;
             m_autoQueuedCallers[i] = queued;
             autoLog(QString("AUTO_QUEUE: updated %1  freq=%2  rpt=%3  grid=%4  reason=%5")
                     .arg(queued.call).arg(queued.freq).arg(queued.report).arg(queued.grid).arg(reason));
-            refreshAutoQueueWindow();
             prepareAutoPotaDualHandoff("queue update");
             return;
         }
@@ -18896,13 +19075,14 @@ void MainWindow::queueAutoCaller(QString const& call, QString const& grid, QStri
     autoLog(QString("AUTO_QUEUE: queued %1  freq=%2  rpt=%3  grid=%4  reason=%5  depth=%6")
             .arg(queued.call).arg(queued.freq).arg(queued.report).arg(queued.grid)
             .arg(reason).arg(m_autoQueuedCallers.size()));
-    refreshAutoQueueWindow();
     prepareAutoPotaDualHandoff("queue add");
 }
 
 bool MainWindow::workNextQueuedAutoCaller(QString const& reason)
 {
     if (!autoCallerQueueEnabled()) return false;
+    // Let the receive period finish before choosing among its callers.
+    if (recentAutoCallersEnabled() && reason != "pre-CQ queued caller") return false;
     if (!(ui->cbAutoCQ->isChecked() || ui->cbAutoPOTA->isChecked()
           || ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked())) {
         return false;
@@ -18913,7 +19093,6 @@ bool MainWindow::workNextQueuedAutoCaller(QString const& reason)
     if ((ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked())
         && !m_priorityCall.trimmed().isEmpty()) {
         autoLog(QString("AUTO_QUEUE: deferring queued caller for priority CQ '%1'").arg(m_priorityCall));
-        refreshAutoQueueWindow();
         return false;
     }
 
@@ -18922,16 +19101,16 @@ bool MainWindow::workNextQueuedAutoCaller(QString const& reason)
 
     QDateTime const now = QDateTime::currentDateTimeUtc();
     while (!m_autoQueuedCallers.isEmpty()) {
-        AutoQueuedCaller queued = m_autoQueuedCallers.dequeue();
+        int const index = nextAutoCallerIndex();
+        if (index < 0) return false;
+        AutoQueuedCaller queued = m_autoQueuedCallers.takeAt(index);
         if (queued.heardAt.secsTo(now) > qMax(90, int(4 * m_TRperiod))) {
             autoLog(QString("AUTO_QUEUE: expired %1").arg(queued.call));
-            refreshAutoQueueWindow();
             continue;
         }
 
         QStringList variants = auto_call_variants(queued.call);
         if (autoQueueCallerShouldSkip(queued.call, queued.grid, reason)) {
-            refreshAutoQueueWindow();
             continue;
         }
         if (!plausible_auto_callsign(queued.call)
@@ -18939,7 +19118,6 @@ bool MainWindow::workNextQueuedAutoCaller(QString const& reason)
             || auto_call_variants_overlap(variants, m_lastCall)
             || auto_call_variants_overlap(variants, m_lastloggedcall)) {
             autoLog(QString("AUTO_QUEUE: skipped stale/recent %1").arg(queued.call));
-            refreshAutoQueueWindow();
             continue;
         }
 
@@ -18955,7 +19133,6 @@ bool MainWindow::workNextQueuedAutoCaller(QString const& reason)
             }
         }
         if (ignored) {
-            refreshAutoQueueWindow();
             continue;
         }
 
@@ -18974,11 +19151,9 @@ bool MainWindow::workNextQueuedAutoCaller(QString const& reason)
         on_txb2_clicked();
         m_autoCallTarget = queued.call;
         auto_tx_mode(true);
-        refreshAutoQueueWindow();
         return true;
     }
 
-    refreshAutoQueueWindow();
     return false;
 }
 
@@ -19059,21 +19234,22 @@ bool MainWindow::commitAutoPotaDualHandoffTx()
     m_bCallingCQ = false;
     tx_watchdog(false);
     stopWRTimer.stop();
-    stopWRTimer.start(int(8000.0 * m_TRperiod));
+    beginMaximumQsoTime(nextCall);
     autoLog(QString("AUTO_DUAL: promoted next caller '%1' as in-progress report QSO  rpt=%2  freq=%3  remaining=%4")
             .arg(nextCall).arg(nextReport).arg(nextFreq).arg(m_autoQueuedCallers.size()));
-    refreshAutoQueueWindow();
     return true;
 }
 
 bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowStartingTx)
 {
-    if (!ui->cb_autoPotaDualHandoff->isChecked()) return false;
+    if (!ui->cb_multiResponse->isChecked()) return false;
     if (!autoCallerQueueEnabled()) return false;
     if (!ui->cbAutoPOTA->isChecked()) return false;
     if (m_mode != "FT8") return false;
     if (m_transmitting) return false;
     if (g_iptt == 1 && (!allowStartingTx || m_iptt0 != 0)) return false;
+    if (recentAutoCallersEnabled() && reason != "pre-TX" && reason != "encode-TX") return false;
+    cancelPreparedAutoPotaDualHandoff();
     if (m_autoQueuedCallers.isEmpty()) return false;
 
     bool finalSignoffTx = (m_ntx == 4 || ui->txrb4->isChecked()
@@ -19108,17 +19284,18 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
 
     QDateTime const now = QDateTime::currentDateTimeUtc();
     while (!m_autoQueuedCallers.isEmpty()) {
-        AutoQueuedCaller const queued = m_autoQueuedCallers.head();
+        int const index = nextAutoCallerIndex();
+        if (index < 0) return false;
+        AutoQueuedCaller const queued = m_autoQueuedCallers.at(index);
         if (queued.heardAt.secsTo(now) > qMax(90, int(4 * m_TRperiod))) {
             autoLog(QString("AUTO_DUAL: expired queued caller %1").arg(queued.call));
-            m_autoQueuedCallers.dequeue();
-            refreshAutoQueueWindow();
+            m_autoQueuedCallers.removeAt(index);
             continue;
         }
 
         QStringList const variants = auto_call_variants(queued.call);
         if (autoQueueCallerShouldSkip(queued.call, queued.grid, reason)) {
-            refreshAutoQueueWindow();
+            removeQueuedAutoCallerVariants(variants, "ineligible handoff caller");
             continue;
         }
         if (!plausible_auto_callsign(queued.call)
@@ -19126,8 +19303,7 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
             || auto_call_variants_overlap(variants, m_lastCall)
             || auto_call_variants_overlap(variants, m_lastloggedcall)) {
             autoLog(QString("AUTO_DUAL: skipped stale/recent queued caller %1").arg(queued.call));
-            m_autoQueuedCallers.dequeue();
-            refreshAutoQueueWindow();
+            m_autoQueuedCallers.removeAt(index);
             continue;
         }
 
@@ -19143,8 +19319,7 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
             }
         }
         if (ignored) {
-            m_autoQueuedCallers.dequeue();
-            refreshAutoQueueWindow();
+            m_autoQueuedCallers.removeAt(index);
             continue;
         }
 
@@ -19152,8 +19327,7 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
         if (!plausible_auto_callsign(nextBase) || nextBase.length() > 6
             || nextBase == completedBase) {
             autoLog(QString("AUTO_DUAL: skipped invalid next caller %1").arg(queued.call));
-            m_autoQueuedCallers.dequeue();
-            refreshAutoQueueWindow();
+            m_autoQueuedCallers.removeAt(index);
             continue;
         }
 
@@ -19164,8 +19338,7 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
         if (!reportOk || reportValue < -30 || reportValue > 30) {
             autoLog(QString("AUTO_DUAL: queued caller %1 has invalid report '%2'")
                     .arg(queued.call).arg(queued.report));
-            m_autoQueuedCallers.dequeue();
-            refreshAutoQueueWindow();
+            m_autoQueuedCallers.removeAt(index);
             continue;
         }
         report = QString("%1%2")
@@ -19180,6 +19353,8 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
             .arg(nextBase)
             .arg(myCall)
             .arg(report);
+        m_autoDualSignoffMessage = ui->tx4->text();
+        m_autoDualSignoffTx = m_ntx;
         m_autoDualLogPending = true;
         m_autoDualCompletedCall = completedCall;
         m_autoDualCompletedGrid = ui->dxGridEntry->text().trimmed();
@@ -19202,11 +19377,9 @@ bool MainWindow::prepareAutoPotaDualHandoff(QString const& reason, bool allowSta
         }
         ui->txrb4->setChecked(true);
         m_ntx = 4;
-        refreshAutoQueueWindow();
         return true;
     }
 
-    refreshAutoQueueWindow();
     return false;
 }
 
@@ -19221,7 +19394,6 @@ void MainWindow::ZProcess()
             m_priorityCall = QString();
         }
         autoLog("ZProcess: skip (transmitting)");
-        refreshAutoQueueWindow();
         return;
     }
 
@@ -19282,7 +19454,6 @@ void MainWindow::ZProcess()
         m_priorityCall = QString();
     }
     m_beeped = false;
-    refreshAutoQueueWindow();
 }
 
 // Add the RX frequency of a decoded station to the current period's busy-slot list
@@ -19537,7 +19708,8 @@ bool MainWindow::callsignFiltered(DecodedText dt)
             QString reason = (g_iptt == 1 && (m_ntx == 4 || m_ntx == 5)) || m_sentFirst73 || m_autoTailWindowActive
                 ? "pre-filter signoff caller"
                 : "pre-filter active caller";
-            queueAutoCaller(queuedCall, dxGrid, dt.report(), dt.frequencyOffset(), decoded_txFirst, reason);
+            queueAutoCaller(queuedCall, dxGrid, dt.report(), dt.frequencyOffset(), decoded_txFirst,
+                            dt.timeInSeconds(), reason);
         }
     }
 
@@ -19700,13 +19872,13 @@ bool MainWindow::callsignFiltered(DecodedText dt)
                                   && no_active_target
                                   && (m_QSOProgress == CALLING || m_ntx == 6 || ui->txrb6->isChecked());
         bool ready_to_work_now = no_active_target
+                                 && !recentAutoCallersEnabled()
                                  && m_auto
                                  && !m_transmitting
                                  && g_iptt == 0
                                  && m_ntx == 6
                                  && m_autoQueuedCallers.isEmpty();
-        bool active_pota_pileup_queue = ui->cbAutoPOTA->isChecked()
-                                        && ui->cb_autoPotaDualHandoff->isChecked();
+        bool active_pota_pileup_queue = autoCallerQueueEnabled();
         bool different_from_active = currentTarget.isEmpty()
                                      || !auto_call_variants_overlap(auto_call_variants(tailenderCall), currentTarget);
         bool can_immediately_seize_caller = ready_to_work_now
@@ -19755,7 +19927,7 @@ bool MainWindow::callsignFiltered(DecodedText dt)
                     : active_pota_pileup_queue ? "Auto POTA pileup caller"
                     : "post-QSO caller";
                 queueAutoCaller(tailenderCall, dxGrid, dt.report(), dt.frequencyOffset(), decoded_txFirst,
-                                reason);
+                                dt.timeInSeconds(), reason);
             } else if (finishing_qso) {
                 m_tailenderCall = tailenderCall;
                 m_tailenderFreq = dt.frequencyOffset();
@@ -19768,34 +19940,6 @@ bool MainWindow::callsignFiltered(DecodedText dt)
         }
     }
 
-    if (ui->cb_workPostQSOCallers->isChecked()
-        && (ui->cbAutoCall->isChecked() || ui->cbAutoHunt->isChecked())) {
-        QString queuedCall = dxCall;
-        if (!callingStation.isEmpty()
-            && callingStation != m_baseCall
-            && callingStation != myBase
-            && callingStation != addressedStation) {
-            queuedCall = callingStation;
-        }
-        bool is_for_me = addressedStation == m_baseCall
-                         || addressedStation == myBase
-                         || message_words.contains(m_baseCall)
-                         || message_words.contains(m_config.my_callsign());
-        bool finishing_qso = (g_iptt == 1 && (m_ntx == 4 || m_ntx == 5))
-                             || m_sentFirst73
-                             || m_autoTailWindowActive;
-        bool no_active_target = ui->dxCallEntry->text().trimmed().isEmpty();
-        bool post_qso_window = no_active_target || finishing_qso || m_QSOProgress == CALLING;
-        if (post_qso_window
-            && is_for_me
-            && !is_73
-            && !auto_call_variants_overlap(auto_call_variants(queuedCall), m_hisCall)
-            && !auto_call_variants_overlap(auto_call_variants(queuedCall), m_lastCall)
-            && !auto_call_variants_overlap(auto_call_variants(queuedCall), m_lastloggedcall)) {
-            queueAutoCaller(queuedCall, dxGrid, dt.report(), dt.frequencyOffset(), decoded_txFirst,
-                            "AutoCall/Hunt post-QSO caller");
-        }
-    }
 
     // POTA Hunt mode: only respond to "CQ POTA" stations, skip already-worked today per-band
     if (ui->cbAutoHunt->isChecked()) {
@@ -19870,7 +20014,6 @@ bool MainWindow::callsignFiltered(DecodedText dt)
         m_prioGrid      = dxGrid;
         autoLog(QString("FILTER: %1 -> PRIORITY  freq=%2  rpt=%3  grid=%4  txFirst=%5")
                 .arg(dxCall).arg(m_prioFreq).arg(m_nextRpt).arg(dxGrid).arg(m_prioTxFirst));
-        refreshAutoQueueWindow();
     }
 
     return false;
@@ -19917,39 +20060,6 @@ void MainWindow::on_btn_showAutoLog_clicked()
     m_autoLogDlg->activateWindow();
 }
 
-void MainWindow::on_btn_showAutoQueue_clicked()
-{
-    if (!m_autoQueueDlg) {
-        m_autoQueueDlg = new QDialog(this, Qt::Window);
-        m_autoQueueDlg->setWindowTitle("Auto Caller Queue");
-        m_autoQueueDlg->resize(720, 360);
-
-        m_autoQueueText = new QTextEdit(m_autoQueueDlg);
-        m_autoQueueText->setReadOnly(true);
-        m_autoQueueText->setLineWrapMode(QTextEdit::NoWrap);
-        QFont f("Monospace");
-        f.setStyleHint(QFont::TypeWriter);
-        f.setPointSize(9);
-        m_autoQueueText->setFont(f);
-
-        QPushButton* refreshBtn = new QPushButton("Refresh", m_autoQueueDlg);
-        connect(refreshBtn, &QPushButton::clicked, [this]() {
-            refreshAutoQueueWindow();
-        });
-
-        QVBoxLayout* vlay = new QVBoxLayout(m_autoQueueDlg);
-        vlay->addWidget(m_autoQueueText);
-        QHBoxLayout* hlay = new QHBoxLayout();
-        hlay->addStretch();
-        hlay->addWidget(refreshBtn);
-        vlay->addLayout(hlay);
-        m_autoQueueDlg->setLayout(vlay);
-    }
-    refreshAutoQueueWindow();
-    m_autoQueueDlg->show();
-    m_autoQueueDlg->raise();
-    m_autoQueueDlg->activateWindow();
-}
 
 void MainWindow::on_cbAutoHunt_toggled(bool b)
 {
@@ -19968,7 +20078,6 @@ void MainWindow::on_cbAutoHunt_toggled(bool b)
         }
         refreshPotaWorkedList();
     }
-    refreshAutoQueueWindow();
 }
 
 void MainWindow::on_cbAutoPOTA_toggled(bool b)
@@ -19997,7 +20106,6 @@ void MainWindow::on_cbAutoPOTA_toggled(bool b)
         genCQMsg();
     }
     auto_tx_mode(b);
-    refreshAutoQueueWindow();
 }
 
 void MainWindow::on_btn_showOmega_toggled(bool visible)

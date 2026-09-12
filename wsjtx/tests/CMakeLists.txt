@@ -21,3 +21,15 @@ include_directories (${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_SOURCE_DIR})
 add_executable (test_qt_helpers test_qt_helpers.cpp)
 target_link_libraries (test_qt_helpers wsjt_qt Qt5::Test)
 add_test (test_qt_helpers test_qt_helpers)
+
+add_executable (test_multi_response test_multi_response.cpp)
+target_link_libraries (test_multi_response Qt5::Core Qt5::Test)
+add_test (test_multi_response test_multi_response)
+
+add_executable (test_qso_deadline test_qso_deadline.cpp)
+target_link_libraries (test_qso_deadline Qt5::Core Qt5::Test)
+add_test (test_qso_deadline test_qso_deadline)
+
+add_executable (test_log_qso_statistics test_log_qso_statistics.cpp)
+target_link_libraries (test_log_qso_statistics Qt5::Core Qt5::Test)
+add_test (test_log_qso_statistics test_log_qso_statistics)

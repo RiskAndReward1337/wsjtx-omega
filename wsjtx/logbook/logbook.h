@@ -28,6 +28,8 @@ public:
   LogBook (Configuration const *);
   ~LogBook ();
   QString const& path () const {return worked_before_.path ();}
+  int qso_count () const {return worked_before_.qso_count ();}
+  int duplicate_count () const {return worked_before_.duplicate_count ();}
   bool add (QString const& call
             , QString const& grid
             , QString const& band

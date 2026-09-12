@@ -12,6 +12,7 @@
 #include <QProgressBar>
 #include <QTimer>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QList>
 #include <QAudioDeviceInfo>
 #include <QStringList>
@@ -32,6 +33,8 @@
 #include <QDateTime>
 
 #include "MultiGeometryWidget.hpp"
+#include "MultiResponse.hpp"
+#include "QsoDeadline.hpp"
 #include "NonInheritingProcess.hpp"
 #include "Audio/AudioDevice.hpp"
 #include "commons.h"
@@ -427,7 +430,8 @@ private slots:
   void on_btn_addToIgnore_clicked();
   void on_btn_clearIgnore_clicked();
   void on_btn_showAutoLog_clicked();
-  void on_btn_showAutoQueue_clicked();
+  void on_cb_multiResponse_toggled(bool enabled);
+  void on_combo_multiResponseSelection_currentIndexChanged(int index);
   void on_btn_showOmega_toggled(bool b);
   void on_btn_clearAutoIgnore_clicked();
   void ignoreAutoStation(QString const& callsign);
@@ -661,6 +665,7 @@ private:
   qint32  m_ncw;
   qint32  m_secID;
   qint32  m_idleMinutes;
+  int m_idleTxCycles = 0;
   qint32  m_nSubMode;
   qint32  m_nclearave;
   qint32  m_minSync;
@@ -829,6 +834,7 @@ private:
   QLabel qso_count_label;
   QProgressBar progressBar;
   QLabel watchdog_label;
+  QLabel qso_limit_label;
 
   QFuture<void> m_wav_future;
   QFutureWatcher<void> m_wav_future_watcher;
@@ -847,6 +853,10 @@ private:
 
   QTimer m_guiTimer;
   QTimer stopWRTimer;               //Wait & Reply
+  QTimer maximumQsoTimer;
+  QElapsedTimer m_qsoClock;
+  QsoDeadline m_qsoDeadline;
+  QString m_maxQsoTarget;
   QTimer stopWCTimer;               //Wait & Call
   QTimer ptt1Timer;                 //StartTx delay
   QTimer ptt0Timer;                 //StopTx delay
@@ -900,15 +910,9 @@ private:
   int     m_maxDistance = 0;
   int     m_maxSignal = -30;
   QString m_priorityCall;
-  struct AutoQueuedCaller {
-    QString call;
-    QString grid;
-    QString report;
-    int freq = 0;
-    bool txFirst = false;
-    QDateTime heardAt;
-  };
+  using AutoQueuedCaller = MultiResponse::Caller;
   QQueue<AutoQueuedCaller> m_autoQueuedCallers;
+  bool m_manualDecodeSelection = false;
   bool    m_autoDualLogPending = false;
   QString m_autoDualCompletedCall;
   QString m_autoDualCompletedGrid;
@@ -918,6 +922,8 @@ private:
   int     m_autoDualNextFreq = 0;
   bool    m_autoDualNextTxFirst = false;
   QString m_autoDualMessage;
+  QString m_autoDualSignoffMessage;
+  int m_autoDualSignoffTx = 4;
   QString m_autoDualRptSent;
   QString m_autoDualRptRcvd;
   QString m_autoDualXSent;
@@ -938,8 +944,6 @@ private:
   QString        m_potaLastDate;     // UTC date when m_potaWorkedToday was last cleared
   QDialog*       m_autoLogDlg  = nullptr;  // Auto CQ/Call contact log window
   QTextEdit*     m_autoLogText = nullptr;  // text widget inside the log window
-  QDialog*       m_autoQueueDlg  = nullptr;  // Auto post-QSO caller queue window
-  QTextEdit*     m_autoQueueText = nullptr;  // text widget inside the queue window
   // Auto-ignore: stations that did not respond (key=call, value=expiry; null QDateTime = indefinite)
   QMap<QString, QDateTime> m_autoIgnored;
   QString        m_autoCallTarget;   // callsign we are currently calling in Auto Call / Hunt
@@ -1129,15 +1133,17 @@ private:
   bool directedNeededGridDecode(DecodedText const& dt, bool requireActiveGridFilter) const;
   bool callsignFiltered(DecodedText dt);
   bool autoCallerQueueEnabled() const;
+  bool recentAutoCallersEnabled() const;
+  int nextAutoCallerIndex();
+  void cancelPreparedAutoPotaDualHandoff();
   void removeQueuedAutoCallerVariants(QStringList const& variants, QString const& reason);
   bool autoQueueCallerShouldSkip(QString const& call, QString const& grid, QString const& context);
   void queueAutoCaller(QString const& call, QString const& grid, QString const& report,
-                       int freq, bool txFirst, QString const& reason);
+                       int freq, bool txFirst, int decodeSeconds, QString const& reason);
   bool workNextQueuedAutoCaller(QString const& reason);
   bool prepareAutoPotaDualHandoff(QString const& reason, bool allowStartingTx = false);
   bool isPreparedAutoPotaDualHandoffTx() const;
   bool commitAutoPotaDualHandoffTx();
-  void refreshAutoQueueWindow();
   void ZProcess();
   void resetAutoSwitch();
   bool setFreeFreq();
@@ -1150,6 +1156,11 @@ private:
   void subProcessError (QProcess *, QProcess::ProcessError);
   void statusUpdate () const;
   void update_watchdog_label ();
+  void update_qso_count_label ();
+  void beginMaximumQsoTime(QString const& call);
+  void finishMaximumQsoTime(QString const& call);
+  void stopMaximumQsoTime();
+  void checkMaximumQsoTime();
   void invalidate_frequencies_filter ();
   void on_the_minute ();
   void add_child_to_event_filter (QObject *);

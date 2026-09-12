@@ -904,6 +904,9 @@ private:
   bool force_call_1st_;
   bool alternate_bindings_;
   int watchdog_;
+  bool watchdog_cycles_;
+  int maximum_qso_time_;
+  bool maximum_qso_cycles_;
   int tune_watchdog_time_;
   bool tune_watchdog_;
   bool TX_messages_;
@@ -1082,6 +1085,9 @@ bool Configuration::disable_TX_on_73 () const {return m_->disable_TX_on_73_;}
 bool Configuration::force_call_1st() const {return m_->force_call_1st_;}
 bool Configuration::alternate_bindings() const {return m_->alternate_bindings_;}
 int Configuration::watchdog () const {return m_->watchdog_;}
+bool Configuration::watchdog_cycles () const {return m_->watchdog_cycles_;}
+int Configuration::maximum_qso_time () const {return m_->maximum_qso_time_;}
+bool Configuration::maximum_qso_cycles () const {return m_->maximum_qso_cycles_;}
 int Configuration::tune_watchdog_time () const {return m_->tune_watchdog_time_;}
 bool Configuration::tune_watchdog () const {return m_->tune_watchdog_;}
 bool Configuration::TX_messages () const {return m_->TX_messages_;}
@@ -2188,6 +2194,9 @@ void Configuration::impl::initialize_models ()
   ui_->force_call_1st_check_box->setChecked (force_call_1st_);
   ui_->alternate_bindings_check_box->setChecked (alternate_bindings_);
   ui_->tx_watchdog_spin_box->setValue (watchdog_);
+  ui_->tx_watchdog_units->setCurrentIndex(watchdog_cycles_ ? 1 : 0);
+  ui_->maximum_qso_spin_box->setValue(maximum_qso_time_);
+  ui_->maximum_qso_units->setCurrentIndex(maximum_qso_cycles_ ? 1 : 0);
   ui_->tune_watchdog_check_box->setChecked(tune_watchdog_);
   ui_->tune_watchdog_spin_box->setValue (tune_watchdog_time_);
   ui_->TX_messages_check_box->setChecked (TX_messages_);
@@ -2632,6 +2641,9 @@ void Configuration::impl::read_settings ()
   force_call_1st_ = settings_->value ("ForceCallFirst", false).toBool ();
   alternate_bindings_ = settings_->value ("AlternateBindings", false).toBool ();
   watchdog_ = settings_->value ("TxWatchdog", 3).toInt ();
+  watchdog_cycles_ = settings_->value("TxWatchdogCycles", false).toBool();
+  maximum_qso_time_ = settings_->value("MaximumQsoTime", 3).toInt();
+  maximum_qso_cycles_ = settings_->value("MaximumQsoCycles", false).toBool();
   tune_watchdog_ = settings_->value("TuneWatchdog",true).toBool ();
   tune_watchdog_time_ = settings_->value ("TuneWatchdogTime", 90).toInt ();
   TX_messages_ = settings_->value ("Tx2QSO", true).toBool ();
@@ -2899,6 +2911,9 @@ void Configuration::impl::write_settings ()
   settings_->setValue ("ForceCallFirst", force_call_1st_);
   settings_->setValue ("AlternateBindings", alternate_bindings_);
   settings_->setValue ("TxWatchdog", watchdog_);
+  settings_->setValue("TxWatchdogCycles", watchdog_cycles_);
+  settings_->setValue("MaximumQsoTime", maximum_qso_time_);
+  settings_->setValue("MaximumQsoCycles", maximum_qso_cycles_);
   settings_->setValue ("TuneWatchdog", tune_watchdog_);
   settings_->setValue ("TuneWatchdogTime", tune_watchdog_time_);
   settings_->setValue ("Tx2QSO", TX_messages_);
@@ -3493,6 +3508,9 @@ void Configuration::impl::accept ()
   force_call_1st_ = ui_->force_call_1st_check_box->isChecked ();
   alternate_bindings_ = ui_->alternate_bindings_check_box->isChecked ();
   watchdog_ = ui_->tx_watchdog_spin_box->value ();
+  watchdog_cycles_ = ui_->tx_watchdog_units->currentIndex() == 1;
+  maximum_qso_time_ = ui_->maximum_qso_spin_box->value();
+  maximum_qso_cycles_ = ui_->maximum_qso_units->currentIndex() == 1;
   tune_watchdog_ = ui_->tune_watchdog_check_box->isChecked ();
   tune_watchdog_time_ = ui_->tune_watchdog_spin_box->value ();
   TX_messages_ = ui_->TX_messages_check_box->isChecked ();

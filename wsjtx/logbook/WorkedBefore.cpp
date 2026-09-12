@@ -1,4 +1,5 @@
 #include "WorkedBefore.hpp"
+#include "LogQsoStatistics.hpp"
 
 #include <functional>
 #include <stdexcept>
@@ -279,9 +280,16 @@ namespace
     return QString {};
   }
 
-  worked_before_database_type loader (QString const& path, AD1CCty const * prefixes)
+  struct LoadedLog
   {
     worked_before_database_type worked;
+    LogQsoStatistics statistics;
+  };
+
+  LoadedLog loader (QString const& path, AD1CCty const * prefixes)
+  {
+    LoadedLog result;
+    auto& worked = result.worked;
     QFile inputFile {path};
     if (inputFile.exists ())
       {
@@ -314,7 +322,7 @@ namespace
                   }
                 buffer.remove (0, end_position + 5);
               }
-            while (!in.atEnd ())
+            while (!in.atEnd () || buffer.contains("<EOR>", Qt::CaseInsensitive))
               {
                 end_position = buffer.indexOf ("<EOR>", 0, Qt::CaseInsensitive);
                 do
@@ -342,6 +350,7 @@ namespace
                           {
                             mode = extractField (record, "SUBMODE").toUpper ();
                           }
+                        result.statistics.add(call, extractField(record, "BAND"), mode);
                         worked.emplace (call.toUpper ()
                                         , extractField (record, "GRIDSQUARE").left (4).toUpper () // not interested in 6-digit grids
                                         , extractField (record, "BAND").toUpper ()
@@ -359,7 +368,7 @@ namespace
             throw LoaderException (std::runtime_error {QCoreApplication::translate ("WorkedBefore", "Error opening ADIF log file for read: %0").arg (inputFile.errorString ()).toLocal8Bit ()});
           }
       }
-    return worked;
+    return result;
   }
 }
 
@@ -375,6 +384,11 @@ public:
 
   void reload ()
   {
+    if (loading_) {
+      reload_after_add_ = true;
+      return;
+    }
+    loading_ = true;
     prefixes_.reload (configuration_);
     async_loader_ = QtConcurrent::run (loader, path_, &prefixes_);
     loader_watcher_.setFuture (async_loader_);
@@ -383,25 +397,39 @@ public:
   Configuration const * configuration_;
   QString path_;
   AD1CCty prefixes_;
-  QFutureWatcher<worked_before_database_type> loader_watcher_;
-  QFuture<worked_before_database_type> async_loader_;
+  QFutureWatcher<LoadedLog> loader_watcher_;
+  QFuture<LoadedLog> async_loader_;
   worked_before_database_type worked_;
+  LogQsoStatistics statistics_;
+  bool reload_after_add_ = false;
+  bool loading_ = false;
 };
 
 WorkedBefore::WorkedBefore (Configuration const * configuration)
   : m_ {configuration}
 {
   Q_ASSERT (configuration);
-  connect (&m_->loader_watcher_, &QFutureWatcher<worked_before_database_type>::finished, [this] () {
+  connect (&m_->loader_watcher_, &QFutureWatcher<LoadedLog>::finished, [this] () {
+      m_->loading_ = false;
       QString error;
       size_t n {0};
       try
         {
-          m_->worked_ = m_->loader_watcher_.result ();
+          auto loaded = m_->loader_watcher_.result ();
+          if (m_->reload_after_add_) {
+            // A QSO appended during the scan may already be in its snapshot.
+            // Rescan instead of guessing whether to add it a second time.
+            m_->reload_after_add_ = false;
+            m_->reload();
+            return;
+          }
+          m_->worked_ = std::move(loaded.worked);
+          m_->statistics_ = std::move(loaded.statistics);
           n = m_->worked_.size ();
         }
       catch (LoaderException const& e)
         {
+          m_->reload_after_add_ = false;
           error = e.error ();
         }
       QString cty_ver = m_->prefixes_.version();
@@ -415,6 +443,9 @@ QString WorkedBefore::cty_version () const
 {
   return m_->prefixes_.version ();
 }
+
+int WorkedBefore::qso_count () const { return m_->statistics_.total(); }
+int WorkedBefore::duplicate_count () const { return m_->statistics_.duplicates(); }
 
 void WorkedBefore::reload ()
 {
@@ -483,6 +514,8 @@ bool WorkedBefore::add (QString const& call
         }
       m_->worked_.emplace (call.toUpper (), grid.left (4).toUpper (), band.toUpper (), mode.toUpper ()
                            , entity.entity_name, entity.continent, entity.CQ_zone, entity.ITU_zone);
+      m_->statistics_.add(call, band, mode);
+      if (m_->loading_) m_->reload_after_add_ = true;
     }
   return true;
 }

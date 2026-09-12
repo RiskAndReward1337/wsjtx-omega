@@ -200,6 +200,9 @@ public:
   bool force_call_1st() const;
   bool alternate_bindings() const;
   int watchdog () const;
+  bool watchdog_cycles () const;
+  int maximum_qso_time () const;
+  bool maximum_qso_cycles () const;
   int tune_watchdog_time () const;
   bool tune_watchdog () const;
   bool TX_messages () const;
