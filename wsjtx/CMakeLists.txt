@@ -10,11 +10,13 @@ if (APPLE)
   #
   # otool -l <binary> | grep -A3 LC_VERSION_MIN_MACOSX
   #
-  set (CMAKE_OSX_DEPLOYMENT_TARGET 10.12
-    CACHE STRING "Earliest version of macOS supported
-
-Earliest version we can support with Qt 5.12, C++11 & libc++ is 10.12.
-Do not override this if you intend to build an official deployable installer.")
+  if (CMAKE_OSX_ARCHITECTURES MATCHES "arm64" OR CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+    set (_macos_minimum 11.0)
+  else ()
+    set (_macos_minimum 10.12)
+  endif ()
+  set (CMAKE_OSX_DEPLOYMENT_TARGET ${_macos_minimum}
+    CACHE STRING "Earliest macOS version; must also satisfy the bundled dependencies")
 endif (APPLE)
 
 #
@@ -1064,7 +1066,11 @@ find_package (Boost 1.62 REQUIRED COMPONENTS log_setup log)
 #
 # OpenMP
 #
-find_package (OpenMP)
+if (APPLE)
+  find_package (OpenMP REQUIRED COMPONENTS Fortran)
+else ()
+  find_package (OpenMP)
+endif ()
 
 #
 # fftw3 single precision library
@@ -1644,8 +1650,8 @@ if (OPENMP_FOUND OR APPLE)
     set_target_properties (jt9
       PROPERTIES
       Fortran_MODULE_DIRECTORY ${CMAKE_BINARY_DIR}/fortran_modules_omp
-      LINK_LIBRARIES "gomp;gcc_s.1" # assume GNU libgcc OpenMP
       )
+    target_link_libraries (jt9 OpenMP::OpenMP_Fortran)
     target_compile_options (jt9
       PRIVATE
       $<$<COMPILE_LANGUAGE:Fortran>:-fopenmp>   # assumes GNU style Fortran compiler

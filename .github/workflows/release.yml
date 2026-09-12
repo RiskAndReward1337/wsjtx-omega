@@ -2,6 +2,14 @@ name: Build And Release
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platforms to build (manual runs do not publish a release)
+        type: choice
+        default: all
+        options:
+          - all
+          - macos-arm64
   push:
     tags:
       - "v*"
@@ -11,6 +19,7 @@ permissions:
 
 jobs:
   source-bundle:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all'
     runs-on: ubuntu-24.04
 
     steps:
@@ -31,6 +40,7 @@ jobs:
           if-no-files-found: error
 
   linux:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all'
     runs-on: ubuntu-24.04
 
     steps:
@@ -83,6 +93,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.platform == 'all'
     runs-on: windows-2022
     defaults:
       run:
@@ -144,12 +155,45 @@ jobs:
           path: dist/windows/*
           if-no-files-found: error
 
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify native Apple Silicon runner
+        run: |
+          test "$(uname -m)" = arm64
+          test "$(brew --prefix)" = /opt/homebrew
+
+      - name: Install macOS build dependencies
+        run: brew install cmake ninja pkg-config gcc@15 qt@5 boost@1.85 fftw libusb portaudio
+
+      - name: Build and verify Apple Silicon DMG
+        run: |
+          bash scripts/run-with-heartbeat.sh 60 bash scripts/build-macos-arm64.sh
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64-packages
+          path: dist/macos-arm64/*
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs:
       - source-bundle
       - linux
       - windows
+      - macos-arm64
     runs-on: ubuntu-24.04
 
     steps:

@@ -22,13 +22,15 @@ if (APPLE OR WIN32)
 
   if (APPLE)
     # install required Qt plugins
+    set (_macos_plugin_dirs)
+    foreach (_plugin platforms audio accessible imageformats styles mediaservice)
+      if (IS_DIRECTORY "${QT_PLUGINS_DIR}/${_plugin}")
+        list (APPEND _macos_plugin_dirs "${QT_PLUGINS_DIR}/${_plugin}")
+      endif ()
+    endforeach ()
     install (
       DIRECTORY
-      ${QT_PLUGINS_DIR}/platforms
-      ${QT_PLUGINS_DIR}/audio
-      ${QT_PLUGINS_DIR}/accessible
-      ${QT_PLUGINS_DIR}/imageformats
-      ${QT_PLUGINS_DIR}/styles
+      ${_macos_plugin_dirs}
       DESTINATION ${WSJT_PLUGIN_DESTINATION}
       CONFIGURATIONS Release MinSizeRel RelWithDebInfo
       #COMPONENT runtime
@@ -145,9 +147,19 @@ if (APPLE OR WIN32)
         set (BU_CHMOD_BUNDLE_ITEMS ON)
         set (gp_tool ${gp_tool})
         # canonicalize path in install context
-        get_filename_component (the_exe ${fixup_exe} REALPATH)
+        get_filename_component (the_exe \"${fixup_exe}\" REALPATH)
         fixup_bundle (\"\${the_exe}\" \"\${QTPLUGINS}\" \"${fixup_library_dirs}\")"
     #COMPONENT runtime
     )
+  if (APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
+    install (CODE "
+      execute_process (
+        COMMAND /bin/bash \"${PROJECT_SOURCE_DIR}/Darwin/sign-bundle.sh\"
+          \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/wsjtx.app\"
+        RESULT_VARIABLE sign_result)
+      if (NOT sign_result EQUAL 0)
+        message (FATAL_ERROR \"Apple Silicon bundle validation/signing failed\")
+      endif ()")
+  endif ()
 endif (APPLE OR WIN32)
 

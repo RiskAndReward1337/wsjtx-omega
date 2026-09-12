@@ -68,6 +68,8 @@ if ("${CPACK_GENERATOR}" STREQUAL "PackageMaker")
 endif ()
 
 if ("${CPACK_GENERATOR}" STREQUAL "DragNDrop")
+  # Do not modify executable contents after ad-hoc bundle signing.
+  set (CPACK_STRIP_FILES FALSE)
   set (CPACK_DMG_VOLUME_NAME "@PROJECT_BUNDLE_NAME@")
   set (CPACK_DMG_BACKGROUND_IMAGE "@PROJECT_SOURCE_DIR@/icons/Darwin/DragNDrop Background.png")
   set (CPACK_DMG_DS_STORE "@PROJECT_SOURCE_DIR@/Darwin/wsjtx_DMG.DS_Store")

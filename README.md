@@ -115,6 +115,8 @@ only: no records are removed and logging rules are unchanged.
 
 ## Local Builds
 
+Apple Silicon (macOS 15 or newer): see [MACOS_BUILD.md](MACOS_BUILD.md).
+
 Linux:
 
 ```bash
@@ -148,6 +150,7 @@ The release workflow in `.github/workflows/release.yml` is designed to:
 
 - build a Linux `wsjtx-omega_*.deb`,
 - build a Windows NSIS installer,
+- build an ad-hoc-signed Apple Silicon macOS DMG and checksum,
 - upload the resulting artifacts to the workflow run, and
 - publish them to a GitHub release when a `v*` tag is pushed.
 
