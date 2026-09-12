@@ -37,6 +37,7 @@ cmake -S "${root}" -B "${build}" -G Ninja \
   -DBoost_ROOT="${boost_prefix}" \
   -DBoost_NO_SYSTEM_PATHS=ON \
   -DWSJT_GENERATE_DOCS=OFF \
+  -DWSJT_SKIP_MANPAGES=ON \
   -DWSJT_ENABLE_OMNIRIG=OFF \
   -DCPACK_PACKAGE_FILE_NAME="wsjtx-omega-${version#v}-macos-arm64" \
   -DCPACK_PACKAGE_CHECKSUM=SHA256

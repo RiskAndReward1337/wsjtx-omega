@@ -13,6 +13,7 @@ bash scripts/build-macos-arm64.sh
 
 The script builds the repository's patched Hamlib and current `wsjtx/` source,
 runs the tests, and writes a DMG and SHA-256 checksum to `dist/macos-arm64/`.
+The GUI DMG omits generated Unix manpages and uses the online user guide.
 The app includes its Qt plugins and non-system libraries; users do not need
 Homebrew or the compiler toolchain installed. Packaging rejects non-ARM64
 binaries and unresolved Homebrew/build-machine dependency paths.
