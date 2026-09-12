@@ -1932,8 +1932,8 @@ endif (WIN32)
 # Mac installer files
 #
 if (APPLE)
+    install (FILES Darwin/OmegaReadMe.txt DESTINATION . RENAME ReadMe.txt)
     install (FILES
-        Darwin/ReadMe.txt
         Darwin/com.wsjtx.sysctl.plist
         DESTINATION .
         #COMPONENT runtime

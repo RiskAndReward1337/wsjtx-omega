@@ -24,6 +24,11 @@ Privacy & Security to open the downloaded app. This does not require disabling
 Gatekeeper system-wide. Grant microphone access when prompted so the program
 can receive radio audio.
 
+Read `ReadMe.txt` inside the DMG before first use. It describes WSJT-X's
+shared-memory requirements and the included `com.wsjtx.sysctl.plist` for a
+fresh Mac. Existing WSJT-X/JTDX installations may already configure these
+limits; the package does not replace system settings automatically.
+
 Pushing a `v*` tag runs the Windows, Linux, source, and macOS jobs and publishes
 all successful artifacts together in a GitHub release. A manual workflow run
 can select `macos-arm64` to test just the Mac build without publishing a release.
